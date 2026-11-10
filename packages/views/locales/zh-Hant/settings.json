@@ -262,7 +262,7 @@
       },
       "send": {
         "label": "傳送",
-        "description": "也用於提交新任務。"
+        "description": "用於評論、回覆、對話這類傳送一則訊息的輸入框。"
       },
       "goBack": {
         "label": "後退",

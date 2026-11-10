@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useRef, useState } from "react";
@@ -27,7 +28,7 @@ import {
 } from "@multica/core/feedback";
 import { useCurrentWorkspace } from "@multica/core/paths";
 import { useT } from "../i18n";
-import { useShortcut } from "@multica/core/shortcuts";
+import { LONG_TEXT_SUBMIT_SHORTCUT } from "../editor/extensions/submit-shortcut";
 import { ShortcutKeycaps } from "../common/shortcut-keycaps";
 import { currentPath, useOptionalNavigation } from "../navigation";
 
@@ -57,7 +58,8 @@ export function FeedbackModal({
   data?: Record<string, unknown> | null;
   initialMessage?: string;
 }) {
-  const sendShortcut = useShortcut("send");
+  // Fork: long-text input — a fixed Mod+Enter, not the `send` setting.
+  const sendShortcut = LONG_TEXT_SUBMIT_SHORTCUT;
   const { t } = useT("modals");
   const { t: tEditor } = useT("editor");
   const workspace = useCurrentWorkspace();
@@ -170,6 +172,7 @@ export function FeedbackModal({
               onUploadFile={(file) => uploadWithToast(file)}
               onUploadingChange={uploadGate.onUploadingChange}
               onSubmit={handleSubmit}
+              submitMode="longText"
               debounceMs={150}
               showBubbleMenu={false}
               className="px-3 py-2"

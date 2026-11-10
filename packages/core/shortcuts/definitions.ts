@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import {
   getShortcutPlatform,
   getShortcutRuntime,
@@ -100,7 +101,10 @@ export const SHORTCUT_ACTIONS: readonly ShortcutActionDefinition[] = [
     defaultShortcut: createShortcutChord("E"),
     allowInEditable: false,
   },
-  { id: "send", category: "general", defaultShortcut: primary("Enter"), allowInEditable: true },
+  // Fork: plain Enter sends by default (Shift+Enter is a newline), the Mac chat
+  // convention. Long-text inputs keep a fixed Mod+Enter regardless — see
+  // `LONG_TEXT_SUBMIT_SHORTCUT` in views/editor/extensions/submit-shortcut.ts.
+  { id: "send", category: "general", defaultShortcut: createShortcutChord("Enter"), allowInEditable: true },
   // Browser-style history navigation (Mod+[ / Mod+]). Neither bracket is
   // app-owned (PRIMARY_RESERVED_KEYS) nor browser-owned
   // (BROWSER_ONLY_PRIMARY_RESERVED_KEYS), so both are recordable on every

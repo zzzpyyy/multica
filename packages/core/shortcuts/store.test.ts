@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { afterEach, describe, expect, it } from "vitest";
 import { createShortcutChord } from "./definitions";
 import { configureShortcutRuntime } from "./platform";
@@ -19,9 +20,8 @@ describe("shortcut store", () => {
     expect(getShortcut("openSearch")).toEqual(
       createShortcutChord("K", { primary: true }),
     );
-    expect(getShortcut("send")).toEqual(
-      createShortcutChord("Enter", { primary: true }),
-    );
+    // Fork default: plain Enter sends.
+    expect(getShortcut("send")).toEqual(createShortcutChord("Enter"));
 
     const custom = createShortcutChord("J", { primary: true });
     useShortcutStore.getState().setShortcut("openSearch", custom);
@@ -57,9 +57,7 @@ describe("shortcut store", () => {
       "send",
       createShortcutChord("Enter", { primary: true, shift: true }),
     );
-    expect(getShortcut("send")).toEqual(
-      createShortcutChord("Enter", { primary: true }),
-    );
+    expect(getShortcut("send")).toEqual(createShortcutChord("Enter"));
   });
 
   it("drops persisted Send overrides outside Enter and Mod+Enter", () => {

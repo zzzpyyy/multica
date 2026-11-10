@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useState, type ReactNode } from "react";
@@ -17,8 +18,10 @@ import { useUpdateIssue, useBatchUpdateIssues } from "@multica/core/issues/mutat
 import { errorCode } from "@multica/core/api";
 import { useActorName } from "@multica/core/workspace/hooks";
 import { useWorkspaceId } from "@multica/core/hooks";
-import { useShortcut, shortcutMatchesEvent, isPlainShortcut } from "@multica/core/shortcuts";
-import { isImeComposing } from "@multica/core/utils";
+import {
+  LONG_TEXT_SUBMIT_SHORTCUT,
+  submitKeyAction,
+} from "../editor/extensions/submit-shortcut";
 import { ShortcutKeycaps } from "../common/shortcut-keycaps";
 import { useStatusLabel } from "../issues/utils/status-label";
 import { useT } from "../i18n";
@@ -100,7 +103,9 @@ export function RunConfirmModal({
   const { t } = useT("modals");
   const { t: tIssues } = useT("issues");
   const { getActorName } = useActorName();
-  const sendShortcut = useShortcut("send");
+  // Fork: confirming starts a run, so it takes the fixed Mod+Enter, never the
+  // `send` setting (default plain Enter).
+  const sendShortcut = LONG_TEXT_SUBMIT_SHORTCUT;
   const d = (data ?? {}) as RunConfirmData;
   const issueIds = d.issueIds ?? [];
 
@@ -180,31 +185,23 @@ export function RunConfirmModal({
   };
 
   /**
-   * The configured `send` chord confirms the assignment, the same chord that
-   * creates from the issue composer (MUL-5694).
+   * Mod+Enter confirms the assignment, the same chord that creates from the
+   * issue composer (MUL-5694).
    *
    * Bound on the dialog, not on a single control, because the chord means "run
    * the primary action" no matter which control has focus — and with only the
    * footer left to focus, that is precisely where the keycap on the confirm
-   * button would otherwise be advertising a dead key.
+   * button would otherwise be advertising a dead key. Chromium fires no click
+   * for Mod+Enter on a focused button, so this never double-writes.
    */
   const onDialogKeyDown = (e: React.KeyboardEvent) => {
+    if (e.defaultPrevented) return;
     // A held chord submits once, and the Enter that commits an IME
     // composition is the user picking a candidate, never a confirmation.
-    if (e.defaultPrevented || e.repeat || isImeComposing(e)) return;
-    if (!shortcutMatchesEvent(sendShortcut, e.nativeEvent)) return;
-    // Only a BARE Enter activates a focused button (Chromium fires no click
-    // for ⌘/Ctrl+Enter), so a `send` remapped to plain Enter is the one case
-    // where confirming here too would double-write — and on "Don't start yet"
-    // the two writes would disagree about suppress_run. Every chord form
-    // reaches the footer as a dead key without us, so it must not be skipped.
-    const activatesFocusedButton =
-      isPlainShortcut(sendShortcut, "Enter") &&
-      e.target instanceof HTMLElement &&
-      e.target.closest("button") !== null;
-    if (activatesFocusedButton) return;
+    const action = submitKeyAction(e.nativeEvent, "longText");
+    if (!action) return;
     e.preventDefault();
-    void submit(false);
+    if (action === "submit") void submit(false);
   };
 
   // States the action, not a prediction: the write is certain, the run is

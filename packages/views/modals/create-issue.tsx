@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { issueStatusCategory } from "@multica/core/issues";
@@ -54,7 +55,7 @@ import { Button } from "@multica/ui/components/ui/button";
 import { Switch } from "@multica/ui/components/ui/switch";
 import { ContentEditor, type ContentEditorRef, TitleEditor, type TitleEditorRef, useFileDropZone, FileDropOverlay, useUploadGate, useComposerSubmit } from "../editor";
 import { useIssueCreateUploads } from "./use-issue-create-uploads";
-import { useShortcut } from "@multica/core/shortcuts";
+import { LONG_TEXT_SUBMIT_SHORTCUT } from "../editor/extensions/submit-shortcut";
 import { ShortcutKeycaps } from "../common/shortcut-keycaps";
 import { StatusIcon, StatusPicker, PriorityIcon, PriorityPicker, StagePicker, AssigneePicker, StartDatePicker, DueDatePicker, LabelPicker } from "../issues/components";
 import { maxSiblingStage } from "../issues/components/pickers/stage-picker";
@@ -272,7 +273,8 @@ export function ManualCreatePanel({
   const setKeepOpen = useQuickCreateStore((s) => s.setKeepOpen);
   const manualFields = useIssueCreateSettingsStore((s) => s.manualCreateFields);
 
-  const sendShortcut = useShortcut("send");
+  // Fork: long-text input — a fixed Mod+Enter, not the `send` setting.
+  const sendShortcut = LONG_TEXT_SUBMIT_SHORTCUT;
   const [title, setTitle] = useState(draft.manual.title);
   const [formResetKey, setFormResetKey] = useState(0);
   const titleEditorRef = useRef<TitleEditorRef>(null);
@@ -1047,6 +1049,7 @@ export function ManualCreatePanel({
                 placeholder={t(($) => $.create_issue.description_placeholder)}
                 onUpdate={(md) => setManual({ description: md })}
                 onSubmit={handleSubmit}
+                submitMode="longText"
                 onUploadFile={handleUpload}
                 onUploadingChange={uploadGate.onUploadingChange}
                 debounceMs={500}

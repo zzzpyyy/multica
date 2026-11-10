@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -107,6 +108,7 @@ import { ColorPicker, COLOR_PICKER_PRESETS } from "../../common/color-picker";
 import { StatusIcon } from "../../issues/components/status-icon";
 import { useStatusLabel } from "../../issues/utils/status-label";
 import { useT } from "../../i18n";
+import { submitKeyAction } from "../../editor/extensions/submit-shortcut";
 import { AppLink, useNavigation } from "../../navigation";
 import {
   SettingsReadOnlyNotice,
@@ -788,9 +790,11 @@ function StatusEditorDialog({
                   setDraft((current) => ({ ...current, description: event.target.value }))
                 }
                 onKeyDown={(event) => {
-                  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                    event.currentTarget.form?.requestSubmit();
-                  }
+                  // Fork: IME-safe, once per press (C16).
+                  const action = submitKeyAction(event.nativeEvent, "longText");
+                  if (!action) return;
+                  event.preventDefault();
+                  if (action === "submit") event.currentTarget.form?.requestSubmit();
                 }}
                 placeholder={t(($) => $.issue_statuses.editor.description_placeholder)}
               />

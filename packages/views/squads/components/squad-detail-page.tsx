@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -10,7 +11,7 @@ import { useModalStore } from "@multica/core/modals";
 import { useIssueStatuses } from "@multica/core/issue-statuses/hooks";
 import { resolvePublicFileUrl } from "@multica/core/workspace/avatar-url";
 import { isImeComposing } from "@multica/core/utils";
-import { getShortcut, shortcutMatchesEvent } from "@multica/core/shortcuts";
+import { submitKeyAction } from "../../editor/extensions/submit-shortcut";
 import { useLocale, useT, useTimeAgo } from "../../i18n";
 import { agentListOptions, memberListOptions, squadMemberStatusOptions, workspaceKeys } from "@multica/core/workspace/queries";
 import { AppLink, currentPath, useNavigation } from "../../navigation";
@@ -1409,11 +1410,12 @@ function SquadDescriptionEditorBody({
         rows={6}
         onKeyDown={(e) => {
           if (e.key === "Escape") { onClose(); return; }
-          if (e.defaultPrevented || e.repeat || isImeComposing(e)) return;
-          if (shortcutMatchesEvent(getShortcut("send"), e.nativeEvent)) {
-            e.preventDefault();
-            void commit();
-          }
+          if (e.defaultPrevented) return;
+          // Fork: long-text input — a fixed Mod+Enter, not the `send` setting.
+          const action = submitKeyAction(e.nativeEvent, "longText");
+          if (!action) return;
+          e.preventDefault();
+          if (action === "submit") void commit();
         }}
         className="w-full resize-none rounded-md border bg-transparent px-3 py-2 text-body outline-none focus-visible:border-input"
       />

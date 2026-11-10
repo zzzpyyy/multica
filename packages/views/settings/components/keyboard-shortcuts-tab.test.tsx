@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import {
@@ -143,9 +144,8 @@ describe("KeyboardShortcutsTab", () => {
 
     fireEvent.click(sendRecorder);
     fireEvent.keyDown(sendRecorder, { key: "Enter", shiftKey: true });
-    expect(getShortcut("send")).toEqual(
-      createShortcutChord("Enter", { primary: true }),
-    );
+    // Fork default: plain Enter.
+    expect(getShortcut("send")).toEqual(createShortcutChord("Enter"));
     expect(screen.getByRole("alert")).toHaveTextContent(
       "Send can only use Enter or Mod+Enter.",
     );

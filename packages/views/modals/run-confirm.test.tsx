@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { buildIssueStatusCatalog } from "@multica/core/issue-statuses";
@@ -279,12 +280,14 @@ describe("RunConfirmModal", () => {
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
   });
 
-  it("follows a remapped send chord instead of hardcoding ⌘+Enter", async () => {
+  // Fork: confirming starts a run, so the chord is a fixed ⌘+Enter and does
+  // not follow `send` (default plain Enter) (C17).
+  it("keeps ⌘+Enter and ignores plain Enter whatever send is bound to", async () => {
     useShortcutStore.setState({ overrides: { send: createShortcutChord("Enter") } });
     render(<RunConfirmModal onClose={vi.fn()} data={single} />);
-    fireEvent.keyDown(dialog(), { key: "Enter", metaKey: true });
-    expect(mockUpdate).not.toHaveBeenCalled();
     fireEvent.keyDown(dialog(), { key: "Enter" });
+    expect(mockUpdate).not.toHaveBeenCalled();
+    fireEvent.keyDown(dialog(), { key: "Enter", metaKey: true });
     await waitFor(() => expect(mockUpdate).toHaveBeenCalledTimes(1));
   });
 

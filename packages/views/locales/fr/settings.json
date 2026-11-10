@@ -264,7 +264,7 @@
       },
       "send": {
         "label": "Envoyer",
-        "description": "Permet aussi de créer des tâches."
+        "description": "Pour les champs qui envoient un message : commentaires, réponses, chat."
       },
       "goBack": {
         "label": "Revenir en arrière",

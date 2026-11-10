@@ -264,7 +264,7 @@
       },
       "send": {
         "label": "Send",
-        "description": "Also submits new issues."
+        "description": "For inputs that send one message, such as comments, replies and chat."
       },
       "goBack": {
         "label": "Go back",

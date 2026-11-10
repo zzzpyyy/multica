@@ -1,6 +1,7 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Globe, Info, Lock } from "@multica/ui/icons";
 import { toast } from "sonner";
 import { useWorkspaceId } from "@multica/core/hooks";
@@ -16,6 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { cn } from "@multica/ui/lib/utils";
 import { AgentPicker } from "../../autopilots/components/pickers/agent-picker";
 import { useT } from "../../i18n";
+import { submitKeyAction } from "../../editor/extensions/submit-shortcut";
 
 interface FormState {
   name: string;
@@ -62,6 +64,9 @@ export function QuickActionDialog({
   const canPublish = role === "owner" || role === "admin";
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  // `saving` only lands on the next render; a second Mod+Enter in the same
+  // tick must already see the save in flight.
+  const savingRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
@@ -79,7 +84,8 @@ export function QuickActionDialog({
     templateToken === null;
 
   const handleSubmit = async () => {
-    if (!canSave) return;
+    if (!canSave || savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       await onSubmit(form);
@@ -87,6 +93,7 @@ export function QuickActionDialog({
     } catch (error) {
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -201,6 +208,13 @@ export function QuickActionDialog({
               rows={5}
               placeholder={t(($) => $.quick_actions.field_prompt_placeholder)}
               onChange={(e) => setForm((f) => ({ ...f, prompt: e.target.value }))}
+              onKeyDown={(e) => {
+                // Fork: long-text input — Mod+Enter saves (C12).
+                const action = submitKeyAction(e.nativeEvent, "longText");
+                if (!action) return;
+                e.preventDefault();
+                if (action === "submit") void handleSubmit();
+              }}
             />
             {templateToken !== null ? (
               <p className="text-caption text-destructive">

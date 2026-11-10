@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import {
@@ -38,7 +39,7 @@ describe("TitleEditor send chord (real editor)", () => {
     useShortcutStore.setState({ overrides: {} });
   });
 
-  it("fires onSubmitShortcut on the default Cmd+Enter chord", async () => {
+  it("fires onSubmitShortcut on Cmd+Enter under the default (Enter) send", async () => {
     const onSubmitShortcut = vi.fn();
     render(<TitleEditor defaultValue="A title" onSubmitShortcut={onSubmitShortcut} />);
     await screen.findByText("A title");
@@ -58,17 +59,19 @@ describe("TitleEditor send chord (real editor)", () => {
     expect(onSubmitShortcut).not.toHaveBeenCalled();
   });
 
-  it("still refuses plain Enter when the user binds send to Enter", async () => {
-    useShortcutStore.setState({ overrides: { send: createShortcutChord("Enter") } });
+  it("keeps the fixed Cmd+Enter whatever send is bound to", async () => {
+    useShortcutStore.setState({
+      overrides: { send: createShortcutChord("Enter", { primary: true }) },
+    });
     const onSubmitShortcut = vi.fn();
     render(<TitleEditor defaultValue="A title" onSubmitShortcut={onSubmitShortcut} />);
     await screen.findByText("A title");
 
     pressEnter();
-
-    // The single-line keymap owns Enter; inheriting a chat-shaped binding here
-    // would create from a half-typed title.
     expect(onSubmitShortcut).not.toHaveBeenCalled();
+
+    pressEnter({ metaKey: true });
+    expect(onSubmitShortcut).toHaveBeenCalledTimes(1);
   });
 
   it("does not fire the chord for hosts that only pass onSubmit", async () => {

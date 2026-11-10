@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 /**
  * Shared extension factory for ContentEditor.
  *
@@ -54,7 +55,7 @@ import { PatchedListItem, PatchedTaskItem } from "./list-item";
 import { createMarkdownPasteExtension } from "./markdown-paste";
 import { createMarkdownCopyExtension } from "./markdown-copy";
 import { createBlurShortcutExtension } from "./blur-shortcut";
-import { createSubmitShortcutExtension } from "./submit-shortcut";
+import { createSubmitShortcutExtension, type SubmitShortcutMode } from "./submit-shortcut";
 import { createFileUploadExtension } from "./file-upload";
 import { FileCardExtension } from "./file-card";
 import { ImageView } from "./image-view";
@@ -147,6 +148,8 @@ export interface EditorExtensionsOptions {
   placeholder?: string | (() => string);
   queryClient?: import("@tanstack/react-query").QueryClient;
   onSubmitRef?: RefObject<(() => void) | undefined>;
+  /** See ContentEditorProps.submitMode. Fixed for the editor's lifetime. */
+  submitMode?: SubmitShortcutMode;
   onUploadFileRef?: RefObject<
     ((file: File, uploadId: string) => Promise<UploadResult | null>) | undefined
   >;
@@ -304,12 +307,18 @@ export function createEditorExtensions(
     Typography,
     Placeholder.configure({ placeholder: placeholderText }),
     createMarkdownPasteExtension(),
-    createSubmitShortcutExtension(() => {
-      const fn = options.onSubmitRef?.current;
-      if (!fn) return false;
-      fn();
-      return true;
-    }),
+    createSubmitShortcutExtension(
+      () => {
+        const fn = options.onSubmitRef?.current;
+        if (!fn) return false;
+        fn();
+        return true;
+      },
+      {
+        mode: options.submitMode,
+        canSubmit: () => options.onSubmitRef?.current !== undefined,
+      },
+    ),
     createBlurShortcutExtension(),
     createFileUploadExtension(options.onUploadFileRef!, options.pasteAsFileThresholdRef),
   ];

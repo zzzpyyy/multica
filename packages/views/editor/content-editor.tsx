@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 /**
@@ -58,6 +59,7 @@ import type { MentionItem } from "./extensions/mention-suggestion";
 import type { IssueIdentifierResolver } from "./extensions/issue-identifier-autolink";
 import type { BuiltinCommandSuggestionOptions } from "./extensions/slash-command-suggestion";
 import { createEditorExtensions } from "./extensions";
+import type { SubmitShortcutMode } from "./extensions/submit-shortcut";
 import {
   uploadAndInsertFile,
   insertUploadPlaceholder,
@@ -136,6 +138,11 @@ interface ContentEditorBaseProps {
   className?: string;
   debounceMs?: number;
   onSubmit?: () => void;
+  /**
+   * Which key submits: `message` (default) follows the `send` setting;
+   * `longText` is a fixed Mod+Enter for multi-paragraph inputs.
+   */
+  submitMode?: SubmitShortcutMode;
   onBlur?: () => void;
   /**
    * Upload transport. `uploadId` is minted by the editor when it inserts the
@@ -369,6 +376,7 @@ const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
       className,
       debounceMs = 300,
       onSubmit,
+      submitMode = "message",
       onBlur,
       onUploadFile,
       pasteAsFileThreshold,
@@ -609,6 +617,7 @@ const ContentEditor = forwardRef<ContentEditorRef, ContentEditorProps>(
         placeholder: () => placeholderRef.current,
         queryClient,
         onSubmitRef,
+        submitMode,
         onUploadFileRef,
         pasteAsFileThresholdRef,
         disableMentions,

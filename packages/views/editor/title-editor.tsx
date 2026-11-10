@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
@@ -7,11 +8,6 @@ import { Document } from "@tiptap/extension-document";
 import { Paragraph } from "@tiptap/extension-paragraph";
 import { Text } from "@tiptap/extension-text";
 import Placeholder from "@tiptap/extension-placeholder";
-import {
-  getShortcut,
-  isPlainShortcut,
-  type ShortcutChord,
-} from "@multica/core/shortcuts";
 import { cn } from "@multica/ui/lib/utils";
 import { useT } from "../i18n";
 import { createSubmitShortcutExtension } from "./extensions/submit-shortcut";
@@ -26,15 +22,14 @@ interface TitleEditorProps {
   autoFocus?: boolean;
   onSubmit?: () => void;
   /**
-   * Fires on the configured `send` chord, independent of `onSubmit`'s plain
+   * Fires on the fixed Mod+Enter chord, independent of `onSubmit`'s plain
    * Enter path. Hosts that submit on plain Enter pass `onSubmit`; hosts that
    * want an explicit chord (create-issue, MUL-4931) pass this instead.
    *
-   * Plain Enter is deliberately never a trigger here even when `send` is
-   * configured as plain Enter: the keymap below already owns that key for
-   * "finish editing", and this single-line editor has no newline to trade it
-   * against. Shadowing it would silently create from a half-typed title —
-   * exactly what #5532 removed.
+   * The chord does not follow the `send` setting (fork default: plain Enter).
+   * The keymap below already owns plain Enter for "finish editing", and
+   * submitting on it would silently create from a half-typed title — exactly
+   * what #5532 removed.
    */
   onSubmitShortcut?: () => void;
   onBlur?: (value: string) => void;
@@ -66,23 +61,6 @@ const SingleLineDocument = Document.extend({
 });
 
 // Keyboard shortcuts: Enter → submit, Escape → blur
-
-/**
- * Whether `onSubmitShortcut` may fire for the configured `send` chord.
- *
- * Plain Enter is excluded on purpose. The keymap below already owns that key
- * ("finish editing"), and unlike a prose editor a single-line title has no
- * newline to trade it against — so a `send` configured as plain Enter would
- * turn every Enter into a create from a half-typed title. That is exactly the
- * misfire #5532 removed, so the title keeps plain Enter inert and only honors
- * an explicit chord. Hosts wanting plain-Enter submit still pass `onSubmit`.
- */
-export function titleShortcutSubmitAllowed(
-  sendShortcut: ShortcutChord | null,
-): boolean {
-  if (!sendShortcut) return false;
-  return !isPlainShortcut(sendShortcut, "Enter");
-}
 
 function createTitleKeymap(opts: {
   onSubmitRef: React.RefObject<(() => void) | undefined>;
@@ -157,17 +135,19 @@ const TitleEditor = forwardRef<TitleEditorRef, TitleEditorProps>(
         createTitleKeymap({ onSubmitRef }),
         // Added last so its ProseMirror plugin sits ahead of the keymap above
         // — same placement the ContentEditor extension list relies on. It
-        // brings the configured `send` chord, the IME guards, and key-repeat
+        // brings the long-text Mod+Enter chord, the IME guards, and key-repeat
         // protection with it, none of which a hand-rolled keydown would have.
         ...(shortcutSubmitEnabled
           ? [
-              createSubmitShortcutExtension(() => {
-                const fn = onSubmitShortcutRef.current;
-                if (!fn) return false;
-                if (!titleShortcutSubmitAllowed(getShortcut("send"))) return false;
-                fn();
-                return true;
-              }),
+              createSubmitShortcutExtension(
+                () => {
+                  const fn = onSubmitShortcutRef.current;
+                  if (!fn) return false;
+                  fn();
+                  return true;
+                },
+                { mode: "longText" },
+              ),
             ]
           : []),
       ],

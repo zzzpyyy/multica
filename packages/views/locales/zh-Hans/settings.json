@@ -262,7 +262,7 @@
       },
       "send": {
         "label": "发送",
-        "description": "也用于提交新任务。"
+        "description": "用于评论、回复、对话这类发一条消息的输入框。"
       },
       "goBack": {
         "label": "后退",

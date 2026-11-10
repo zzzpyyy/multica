@@ -246,7 +246,7 @@
       },
       "send": {
         "label": "Enviar",
-        "description": "También envía nuevas tareas."
+        "description": "Para los campos que envían un mensaje: comentarios, respuestas y chat."
       },
       "goBack": {
         "label": "Ir atrás",

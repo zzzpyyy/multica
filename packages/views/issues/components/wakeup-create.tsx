@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useId, useMemo, useRef, useState, type ReactNode } from "react";
@@ -25,7 +26,10 @@ import { propertyListOptions } from "@multica/core/properties/queries";
 import { isAgentRuntimeBound } from "@multica/core/agents";
 import { ApiError } from "@multica/core/api";
 import { agentListOptions, memberListOptions, squadListOptions } from "@multica/core/workspace/queries";
-import { shortcutMatchesEvent, useShortcut } from "@multica/core/shortcuts";
+import {
+  LONG_TEXT_SUBMIT_SHORTCUT,
+  submitKeyAction,
+} from "../../editor/extensions/submit-shortcut";
 import { Button } from "@multica/ui/components/ui/button";
 import { IconButton } from "@multica/ui/components/common/icon-button";
 import { Input } from "@multica/ui/components/ui/input";
@@ -156,7 +160,8 @@ export function WakeupCreateForm({
   const [draft, setDraft] = useState(() => emptyWakeupDraft(defaultAgentId, timezone));
   const [error, setError] = useState("");
   const create = useCreateIssueWakeup(workspaceId, issueId);
-  const sendShortcut = useShortcut("send");
+  // Fork: long-text input — a fixed Mod+Enter, not the `send` setting.
+  const sendShortcut = LONG_TEXT_SUBMIT_SHORTCUT;
   const { data: agents = [] } = useQuery(agentListOptions(workspaceId));
   const { data: properties = [] } = useQuery(propertyListOptions(workspaceId));
   const { data: issue } = useQuery(issueDetailOptions(workspaceId, issueId));
@@ -212,10 +217,10 @@ export function WakeupCreateForm({
         void submit();
       }}
       onKeyDown={(event) => {
-        if (sendShortcut && shortcutMatchesEvent(sendShortcut, event.nativeEvent) && !event.nativeEvent.isComposing) {
-          event.preventDefault();
-          void submit();
-        }
+        const action = submitKeyAction(event.nativeEvent, "longText");
+        if (!action) return;
+        event.preventDefault();
+        if (action === "submit") void submit();
       }}
     >
       <Title id={`${id}-title`} className="text-title-sm font-semibold">
