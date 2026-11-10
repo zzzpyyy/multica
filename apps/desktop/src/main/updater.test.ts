@@ -1,7 +1,8 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BrowserWindow, WebContents } from "electron";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -21,6 +22,7 @@ const ctx = vi.hoisted(() => ({
   getVersion: vi.fn(() => "0.3.17"),
   appHandlers: new Map<string, Handler[]>(),
   appQuit: vi.fn(),
+  openExternal: vi.fn(async () => {}),
   userDataPath: "",
 }));
 
@@ -58,6 +60,7 @@ vi.mock("electron", () => ({
   ipcMain: {
     handle: ctx.ipcHandle,
   },
+  shell: { openExternal: ctx.openExternal },
 }));
 
 import { autoUpdater } from "electron-updater";
@@ -67,7 +70,6 @@ import {
   setupAutoUpdater,
   type UpdaterDaemonGate,
 } from "./updater";
-import { updaterPreferencesPath } from "./updater-preferences";
 
 describe("macOS x64 update channel", () => {
   it("does not touch established architecture paths", () => {
@@ -175,6 +177,7 @@ describe("setupAutoUpdater", () => {
       ctx.ipcHandlers.set(channel, handler);
     });
     ctx.checkForUpdates.mockClear();
+    ctx.openExternal.mockClear();
     ctx.downloadUpdate.mockClear();
     ctx.quitAndInstall.mockClear();
     ctx.getVersion.mockClear();
@@ -186,63 +189,24 @@ describe("setupAutoUpdater", () => {
     rmSync(ctx.userDataPath, { recursive: true, force: true });
   });
 
-  it("enables automatic background updates by default", async () => {
+  it("never checks for updates on its own", async () => {
     setupAutoUpdater(() => []);
 
-    await expect(invokeIpc("updater:get-preferences")).resolves.toEqual({
-      automaticUpdates: true,
-    });
-
-    await vi.advanceTimersByTimeAsync(5_000);
-    expect(ctx.checkForUpdates).toHaveBeenCalledTimes(1);
-  });
-
-  it("skips startup and periodic checks when automatic updates are disabled", async () => {
-    writeFileSync(
-      updaterPreferencesPath(ctx.userDataPath),
-      JSON.stringify({ automaticUpdates: false }),
-    );
-    setupAutoUpdater(() => []);
-
-    // Let the async preference load settle before advancing timers; otherwise
-    // the in-flight readFile can resolve after afterEach() removes the temp
-    // dir, default back to enabled=true, and fire a background check into the
-    // next test's freshly-cleared mock (flake on slow CI).
-    await invokeIpc("updater:get-preferences");
-
-    await vi.advanceTimersByTimeAsync(60 * 60 * 1000 + 5_000);
+    await vi.advanceTimersByTimeAsync(2 * 60 * 60 * 1000);
 
     expect(ctx.checkForUpdates).not.toHaveBeenCalled();
+    expect(ctx.ipcHandlers.has("updater:set-automatic-updates")).toBe(false);
   });
 
-  it("persists the automatic update preference and stops future background checks", async () => {
+  it("opens the fork's Releases page for a manual check", async () => {
     setupAutoUpdater(() => []);
 
-    await expect(
-      invokeIpc("updater:set-automatic-updates", false),
-    ).resolves.toEqual({ automaticUpdates: false });
-    expect(
-      JSON.parse(
-        readFileSync(updaterPreferencesPath(ctx.userDataPath), "utf-8"),
-      ),
-    ).toEqual({ automaticUpdates: false });
+    await expect(invokeIpc("updater:check")).resolves.toEqual({ ok: true });
 
-    await vi.advanceTimersByTimeAsync(60 * 60 * 1000 + 5_000);
-    expect(ctx.checkForUpdates).not.toHaveBeenCalled();
-  });
-
-  it("still allows an explicit manual check when automatic updates are disabled", async () => {
-    writeFileSync(
-      updaterPreferencesPath(ctx.userDataPath),
-      JSON.stringify({ automaticUpdates: false }),
+    expect(ctx.openExternal).toHaveBeenCalledExactlyOnceWith(
+      "https://github.com/zzzpyyy/multica/releases",
     );
-    setupAutoUpdater(() => []);
-
-    await expect(invokeIpc("updater:check")).resolves.toMatchObject({
-      ok: true,
-    });
-
-    expect(ctx.checkForUpdates).toHaveBeenCalledTimes(1);
+    expect(ctx.checkForUpdates).not.toHaveBeenCalled();
   });
 
   it("forwards update progress to a live renderer", () => {

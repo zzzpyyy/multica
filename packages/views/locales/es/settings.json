@@ -1247,15 +1247,9 @@
     "updates": {
       "title": "Actualizaciones",
       "current_version": "Versión actual",
-      "automatic_updates_title": "Actualizaciones automáticas en segundo plano",
-      "automatic_updates_description": "Comprueba poco después de iniciar y cada hora, y descarga las actualizaciones disponibles en segundo plano.",
-      "automatic_updates_save_failed": "Error al guardar la configuración de actualizaciones automáticas",
       "check_section_title": "Buscar actualizaciones",
-      "check_section_description": "Se te pedirá reiniciar cuando la descarga esté lista.",
-      "up_to_date": "Tienes la última versión.",
-      "downloading": "v{{version}} se está descargando en segundo plano: te avisaremos cuando esté lista para instalar.",
-      "check_now": "Buscar ahora",
-      "checking": "Comprobando…"
+      "check_section_description": "Abre la página de Releases en el navegador. Descarga allí la nueva versión e instálala sobre esta.",
+      "check_now": "Buscar ahora"
     },
     "daemon": {
       "title": "Daemon",
@@ -1273,8 +1267,20 @@
       "cli_status": "Estado de la CLI",
       "cli_checking": "Comprobando…",
       "cli_installed": "La CLI de multica está instalada y disponible en PATH.",
-      "cli_missing": "No se encontró la CLI de multica. Instálala para gestionar el daemon.",
+      "cli_missing": "No hay ninguna CLI de la versión fork utilizable. Instala la CLI de multica de la versión fork para gestionar el daemon.",
       "installation_guide": "Guía de instalación",
+      "cli_sources": {
+        "bundled": "Incluida en la app",
+        "managed": "Descargada previamente",
+        "download": "Descarga desde Releases",
+        "path": "multica en el PATH"
+      },
+      "cli_results": {
+        "missing": "no encontrada",
+        "not_fork": "no es la versión fork ({{version}})",
+        "failed": "falló"
+      },
+      "cli_source_result": "{{source}}: {{result}}",
       "diagnostics_title": "Diagnóstico",
       "state": "Estado",
       "uptime": "Tiempo activo",

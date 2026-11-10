@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 // @vitest-environment node
 import { mkdtemp, writeFile } from "fs/promises";
 import { join } from "path";
@@ -35,22 +36,14 @@ describe("loadRuntimeConfig", () => {
     });
   });
 
-  it("uses cloud defaults when packaged config is absent", async () => {
+  it("fails closed instead of using a default server when packaged config is absent", async () => {
     const dir = await mkdtemp(join(tmpdir(), "multica-desktop-config-"));
+    const configPath = join(dir, "missing.json");
     await expect(
-      loadRuntimeConfig({
-        isDev: false,
-        configPath: join(dir, "missing.json"),
-        env: {},
-      }),
+      loadRuntimeConfig({ isDev: false, configPath, env: {} }),
     ).resolves.toEqual({
-      ok: true,
-      config: {
-        schemaVersion: 1,
-        apiUrl: "https://api.multica.ai",
-        wsUrl: "wss://api.multica.ai/ws",
-        appUrl: "https://multica.ai",
-      },
+      ok: false,
+      error: { message: `${configPath} not found` },
     });
   });
 

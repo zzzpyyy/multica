@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -57,13 +58,6 @@ vi.mock("electron-updater", () => ({
   },
 }));
 
-vi.mock("./updater-preferences", () => ({
-  DEFAULT_UPDATER_PREFERENCES: { automaticUpdates: false },
-  updaterPreferencesPath: () => "/review-only/updater-preferences.json",
-  loadUpdaterPreferences: async () => ({ automaticUpdates: false }),
-  saveUpdaterPreferences: vi.fn(),
-}));
-
 vi.mock("./cli-bootstrap", () => ({
   managedCliPath: () => "/review-only/managed-cli",
   ensureManagedCli: vi.fn(async () => "/review-only/managed-cli"),
@@ -93,7 +87,7 @@ vi.mock("./daemon-port", () => ({
 }));
 vi.mock("child_process", () => ({
   execFile: vi.fn((_file: string, args: string[], _opts: unknown, cb: (err: Error | null, stdout: string) => void) => {
-    if (args[0] === "version") cb(null, '{"version":"0.7.0"}');
+    if (args[0] === "version") cb(null, '{"version":"0.7.0-fork.1"}');
     else if (args[0] === "daemon" && args[1] === "stop") {
       ctx.stops++;
       ctx.health = null;
@@ -101,7 +95,7 @@ vi.mock("child_process", () => ({
       cb(null, "");
     } else if (args[0] === "daemon" && args[1] === "start") {
       ctx.starts++;
-      ctx.health = { status: "starting", pid: 4343, active_task_count: 0, cli_version: "0.7.0" };
+      ctx.health = { status: "starting", pid: 4343, active_task_count: 0, cli_version: "0.7.0-fork.1" };
       if (ctx.holdStart) ctx.finishStart = () => cb(null, "");
       else cb(null, "");
     } else cb(null, "");
@@ -160,7 +154,7 @@ beforeEach(() => {
   ctx.processAlive = true;
   ctx.holdStart = false;
   ctx.finishStart = null;
-  ctx.health = { status: "running", pid: 4242, active_task_count: 0, cli_version: "0.7.0" };
+  ctx.health = { status: "running", pid: 4242, active_task_count: 0, cli_version: "0.7.0-fork.1" };
   ctx.quit.mockReset().mockImplementation(emitQuit);
   ctx.install.mockReset();
   // Never probe or signal a real process.

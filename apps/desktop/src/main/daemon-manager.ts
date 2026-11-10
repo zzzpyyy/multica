@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { app, ipcMain, BrowserWindow, shell, dialog, type MessageBoxOptions } from "electron";
 import { execFile } from "child_process";
 import {
@@ -17,6 +18,7 @@ import {
 import { join } from "path";
 import { homedir, hostname } from "os";
 import type {
+  CliSourceAttempt,
   DaemonStatus,
   DaemonPrefs,
   LocalRuntimeProbe,
@@ -98,6 +100,9 @@ let statusPollInProgress = false;
 let cachedCliBinary: string | null | undefined = undefined;
 let cliResolvePromise: Promise<string | null> | null = null;
 let cachedCliBinaryVersion: string | null | undefined = undefined;
+// What each CLI source gave on the last resolve that found nothing usable;
+// reported alongside the "cli_not_found" state.
+let cliSourcesTried: CliSourceAttempt[] = [];
 // Set when a CLI version mismatch was detected but the running daemon is
 // busy executing tasks. The poll loop retries the check on each tick and
 // fires the restart once active_task_count drops to 0.
@@ -347,8 +352,9 @@ async function fetchHealth(): Promise<DaemonStatus> {
   // While the CLI is being downloaded or has permanently failed, short-circuit
   // polling — there's nothing to probe yet and /health calls would just return
   // "stopped", which would overwrite the correct setup state in the UI.
-  if (currentState === "installing_cli" || currentState === "cli_not_found") {
-    return { state: currentState };
+  if (currentState === "installing_cli") return { state: currentState };
+  if (currentState === "cli_not_found") {
+    return { state: currentState, cliSources: cliSourcesTried };
   }
 
   const active = await ensureActiveProfile();
@@ -482,7 +488,8 @@ function bundledCliPath(): string {
 
 async function probeCliBinary(
   bin: string,
-  source: "bundled" | "managed" | "path",
+  source: CliSourceAttempt["source"],
+  tried?: CliSourceAttempt[],
 ): Promise<string | null> {
   try {
     const stdout = await new Promise<string>((resolve, reject) => {
@@ -498,16 +505,23 @@ async function probeCliBinary(
     });
     const parsed = JSON.parse(stdout) as { version?: string };
     if (typeof parsed.version === "string" && parsed.version.length > 0) {
-      return parsed.version;
+      // Only fork builds (vX.Y.Z-fork.N) carry this fork's daemon features; an
+      // upstream CLI from any source is skipped so the next source is tried.
+      if (parsed.version.includes("-fork.")) return parsed.version;
+      console.warn(
+        `[daemon] ignoring ${source} CLI at ${bin}: ${parsed.version} is not a fork build`,
+      );
+      tried?.push({ source, result: "not_fork", version: parsed.version });
+      return null;
     }
     console.warn(
       `[daemon] ignoring ${source} CLI at ${bin}: version output was missing or invalid`,
     );
-    return null;
   } catch (err) {
     console.warn(`[daemon] ignoring ${source} CLI at ${bin}:`, err);
-    return null;
   }
+  tried?.push({ source, result: "failed" });
+  return null;
 }
 
 /**
@@ -532,32 +546,37 @@ async function resolveCliBinary(): Promise<string | null> {
   if (cliResolvePromise) return cliResolvePromise;
 
   cliResolvePromise = (async () => {
+    const tried: CliSourceAttempt[] = [];
     const bundled = bundledCliPath();
     if (existsSync(bundled)) {
-      const version = await probeCliBinary(bundled, "bundled");
+      const version = await probeCliBinary(bundled, "bundled", tried);
       if (version) {
         console.log(`[daemon] using bundled CLI at ${bundled}`);
         cachedCliBinary = bundled;
         cachedCliBinaryVersion = version;
         return bundled;
       }
+    } else {
+      tried.push({ source: "bundled", result: "missing" });
     }
 
     const managed = managedCliPath();
     if (existsSync(managed)) {
-      const version = await probeCliBinary(managed, "managed");
+      const version = await probeCliBinary(managed, "managed", tried);
       if (version) {
         cachedCliBinary = managed;
         cachedCliBinaryVersion = version;
         return managed;
       }
+    } else {
+      tried.push({ source: "managed", result: "missing" });
     }
 
     try {
       const installed = await ensureManagedCli({
         forceInstall: existsSync(managed),
       });
-      const version = await probeCliBinary(installed, "managed");
+      const version = await probeCliBinary(installed, "download", tried);
       if (version) {
         cachedCliBinary = installed;
         cachedCliBinaryVersion = version;
@@ -568,20 +587,24 @@ async function resolveCliBinary(): Promise<string | null> {
       );
     } catch (err) {
       console.warn("[daemon] CLI auto-install failed, falling back to PATH:", err);
+      tried.push({ source: "download", result: "failed" });
     }
 
     const onPath = findCliOnPath();
     if (onPath) {
-      const version = await probeCliBinary(onPath, "path");
+      const version = await probeCliBinary(onPath, "path", tried);
       if (version) {
         cachedCliBinary = onPath;
         cachedCliBinaryVersion = version;
         return onPath;
       }
+    } else {
+      tried.push({ source: "path", result: "missing" });
     }
 
     cachedCliBinary = null;
     cachedCliBinaryVersion = null;
+    cliSourcesTried = tried;
     return null;
   })();
 
@@ -1288,7 +1311,7 @@ async function bootstrapCli(): Promise<void> {
   const bin = await resolveCliBinary();
   if (!bin) {
     currentState = "cli_not_found";
-    sendStatus({ state: "cli_not_found" });
+    sendStatus({ state: "cli_not_found", cliSources: cliSourcesTried });
     return;
   }
   currentState = "stopped";

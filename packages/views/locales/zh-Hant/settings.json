@@ -1259,15 +1259,9 @@
     "updates": {
       "title": "更新",
       "current_version": "當前版本",
-      "automatic_updates_title": "後臺自動更新",
-      "automatic_updates_description": "開啟後，桌面端會在啟動後和每小時檢查更新，並在後臺下載可用版本。",
-      "automatic_updates_save_failed": "儲存自動更新設定失敗",
       "check_section_title": "檢查更新",
-      "check_section_description": "下載完成後會提示重啟。",
-      "up_to_date": "已是最新版本。",
-      "downloading": "v{{version}} 正在後臺下載——準備好安裝時會通知你。",
-      "check_now": "立即檢查",
-      "checking": "檢查中..."
+      "check_section_description": "在瀏覽器中開啟 Releases 頁面。在那裡下載新版本，覆蓋安裝即可。",
+      "check_now": "立即檢查"
     },
     "daemon": {
       "title": "守護程序",
@@ -1285,8 +1279,20 @@
       "cli_status": "CLI 狀態",
       "cli_checking": "檢查中...",
       "cli_installed": "multica CLI 已安裝，並可透過 PATH 呼叫。",
-      "cli_missing": "未找到 multica CLI。安裝後才能管理守護程序。",
+      "cli_missing": "沒有可用的 fork 版 CLI。安裝 fork 版 multica CLI 後才能管理守護程序。",
       "installation_guide": "安裝指南",
+      "cli_sources": {
+        "bundled": "安裝包內建",
+        "managed": "已下載的副本",
+        "download": "從 Releases 下載",
+        "path": "PATH 上的 multica"
+      },
+      "cli_results": {
+        "missing": "未找到",
+        "not_fork": "不是 fork 版（{{version}}）",
+        "failed": "失敗"
+      },
+      "cli_source_result": "{{source}}：{{result}}",
       "diagnostics_title": "診斷資訊",
       "state": "狀態",
       "uptime": "執行時長",

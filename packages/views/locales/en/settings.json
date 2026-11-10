@@ -1265,15 +1265,9 @@
     "updates": {
       "title": "Updates",
       "current_version": "Current version",
-      "automatic_updates_title": "Automatic background updates",
-      "automatic_updates_description": "Check shortly after launch and every hour, then download available updates in the background.",
-      "automatic_updates_save_failed": "Failed to save automatic update settings",
       "check_section_title": "Check for updates",
-      "check_section_description": "You'll be prompted to restart when the download is ready.",
-      "up_to_date": "You're on the latest version.",
-      "downloading": "v{{version}} is downloading in the background — you'll be notified when it's ready to install.",
-      "check_now": "Check now",
-      "checking": "Checking…"
+      "check_section_description": "Opens the Releases page in your browser. Download the new version there and install it over this one.",
+      "check_now": "Check now"
     },
     "daemon": {
       "title": "Daemon",
@@ -1291,8 +1285,20 @@
       "cli_status": "CLI Status",
       "cli_checking": "Checking…",
       "cli_installed": "multica CLI is installed and available in PATH.",
-      "cli_missing": "multica CLI not found. Install it to enable daemon management.",
+      "cli_missing": "No usable fork CLI. Install the fork's multica CLI to enable daemon management.",
       "installation_guide": "Installation Guide",
+      "cli_sources": {
+        "bundled": "Bundled with the app",
+        "managed": "Previously downloaded",
+        "download": "Download from Releases",
+        "path": "multica on PATH"
+      },
+      "cli_results": {
+        "missing": "not found",
+        "not_fork": "not a fork build ({{version}})",
+        "failed": "failed"
+      },
+      "cli_source_result": "{{source}}: {{result}}",
       "diagnostics_title": "Diagnostics",
       "state": "State",
       "uptime": "Uptime",

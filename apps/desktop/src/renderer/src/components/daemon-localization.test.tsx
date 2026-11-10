@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { act, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,13 +18,13 @@ vi.mock("../platform/daemon-reauth", () => ({
 
 let emitLogLine: (line: string) => void = () => {};
 
-function installDaemonAPI(status: DaemonStatus) {
+function installDaemonAPI(status: DaemonStatus, cliInstalled = true) {
   Object.defineProperty(window, "daemonAPI", {
     configurable: true,
     value: {
       getPrefs: vi.fn().mockResolvedValue({ autoStart: true, autoStop: false }),
       setPrefs: vi.fn().mockResolvedValue({ autoStart: true, autoStop: false }),
-      isCliInstalled: vi.fn().mockResolvedValue(true),
+      isCliInstalled: vi.fn().mockResolvedValue(cliInstalled),
       getStatus: vi.fn().mockResolvedValue(status),
       onStatusChange: vi.fn(() => () => {}),
       startLogStream: vi.fn(),
@@ -82,5 +83,28 @@ describe("Desktop daemon localization with real zh-Hans resources", () => {
     expect(
       await screen.findByText('另有 1 条"poll complete"——点击展开'),
     ).toBeInTheDocument();
+  });
+
+  it("lists each CLI source tried when no fork CLI is usable", async () => {
+    installDaemonAPI(
+      {
+        state: "cli_not_found",
+        cliSources: [
+          { source: "bundled", result: "missing" },
+          { source: "download", result: "failed" },
+          { source: "path", result: "not_fork", version: "0.8.1" },
+        ],
+      },
+      false,
+    );
+
+    renderInSimplifiedChinese(<DaemonSettingsTab />);
+
+    expect(
+      await screen.findByText("没有可用的 fork 版 CLI。安装 fork 版 multica CLI 后才能管理守护进程。"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("安装包自带：未找到")).toBeInTheDocument();
+    expect(screen.getByText("从 Releases 下载：失败")).toBeInTheDocument();
+    expect(screen.getByText("PATH 上的 multica：不是 fork 版（0.8.1）")).toBeInTheDocument();
   });
 });

@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 export type DaemonState =
   | "running"
   | "stopped"
@@ -35,6 +36,19 @@ export interface DaemonStatus {
    * never disables the toggles for a normally-managed native daemon. See #3916.
    */
   externallyManaged?: boolean;
+  /**
+   * Only with "cli_not_found": each CLI source tried, in order, and why it was
+   * not used. The fork accepts only CLIs whose version contains "-fork.".
+   */
+  cliSources?: CliSourceAttempt[];
+}
+
+export interface CliSourceAttempt {
+  /** bundled in the app, managed copy in userData, fresh download, or PATH. */
+  source: "bundled" | "managed" | "download" | "path";
+  result: "missing" | "not_fork" | "failed";
+  /** Version reported by a CLI rejected as "not_fork". */
+  version?: string;
 }
 
 export interface DaemonPrefs {

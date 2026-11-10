@@ -1,12 +1,3 @@
-export interface UpdaterPreferences {
-  automaticUpdates: boolean;
-}
-
-export type ManualUpdateCheckResult =
-  | {
-      ok: true;
-      currentVersion: string;
-      latestVersion: string;
-      available: boolean;
-    }
-  | { ok: false; error: string };
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+// The manual check only opens the fork's Releases page.
+export type ManualUpdateCheckResult = { ok: true } | { ok: false; error: string };

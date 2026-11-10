@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { app } from "electron";
 import { execFile } from "child_process";
 import { createHash } from "crypto";
@@ -8,14 +9,14 @@ import { pipeline } from "stream/promises";
 import { tmpdir } from "os";
 import { Readable } from "stream";
 
+import { FORK_RELEASES_URL } from "../shared/fork";
 import { selectPlatformReleaseAssetName } from "./cli-release-asset";
 
 // Desktop prefers the bundled `multica` CLI shipped inside the app for
 // same-repo builds, but it can also repair or bootstrap a managed copy in
 // userData on first launch when the bundled binary is missing or unusable.
 
-const GITHUB_LATEST_BASE =
-  "https://github.com/multica-ai/multica/releases/latest/download";
+const GITHUB_LATEST_BASE = `${FORK_RELEASES_URL}/latest/download`;
 
 function binaryName(): string {
   return process.platform === "win32" ? "multica.exe" : "multica";

@@ -1,8 +1,8 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { app } from "electron";
 import { readFile } from "fs/promises";
 import { join } from "path";
 import {
-  DEFAULT_RUNTIME_CONFIG,
   parseRuntimeConfig,
   runtimeConfigFromDevEnv,
   type RuntimeConfig,
@@ -28,8 +28,10 @@ export async function loadRuntimeConfig(options: {
     const raw = await readFile(configPath, "utf-8");
     return { ok: true, config: parseRuntimeConfig(raw) };
   } catch (err) {
+    // The fork ships no server address: a packaged build without
+    // desktop.json shows the config error page instead of connecting anywhere.
     if (isMissingFileError(err)) {
-      return { ok: true, config: { ...DEFAULT_RUNTIME_CONFIG } };
+      return { ok: false, error: { message: `${configPath} not found` } };
     }
     return {
       ok: false,

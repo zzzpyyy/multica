@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { ElectronAPI } from "@electron-toolkit/preload";
 import type { RuntimeConfigResult } from "../shared/runtime-config";
 import type { NavigationGesture } from "../shared/navigation-gestures";
@@ -7,10 +8,7 @@ import type {
   DesktopWindowContext,
   IssueWindowRequest,
 } from "../shared/issue-window";
-import type {
-  ManualUpdateCheckResult,
-  UpdaterPreferences,
-} from "../shared/updater-types";
+import type { ManualUpdateCheckResult } from "../shared/updater-types";
 import type {
   DaemonStatus,
   DaemonPrefs,
@@ -176,8 +174,6 @@ interface UpdaterAPI {
   ) => () => void;
   downloadUpdate: () => Promise<void>;
   installUpdate: () => Promise<void>;
-  getPreferences: () => Promise<UpdaterPreferences>;
-  setAutomaticUpdates: (enabled: boolean) => Promise<UpdaterPreferences>;
   checkForUpdates: () => Promise<ManualUpdateCheckResult>;
 }
 

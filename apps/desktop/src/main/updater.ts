@@ -1,15 +1,9 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { autoUpdater, type UpdateDownloadedEvent } from "electron-updater";
 import { app, type BrowserWindow, type MessageBoxOptions, ipcMain } from "electron";
-import type {
-  ManualUpdateCheckResult,
-  UpdaterPreferences,
-} from "../shared/updater-types";
-import {
-  DEFAULT_UPDATER_PREFERENCES,
-  loadUpdaterPreferences,
-  saveUpdaterPreferences,
-  updaterPreferencesPath,
-} from "./updater-preferences";
+import type { ManualUpdateCheckResult } from "../shared/updater-types";
+import { FORK_RELEASES_URL } from "../shared/fork";
+import { openExternalSafely } from "./external-url";
 import type { DaemonInstallPrep } from "./update-install-gate";
 
 // Silent background updates: electron-updater downloads on its own as soon
@@ -52,8 +46,6 @@ export function configureMacX64UpdateChannel(
 // arm64 feed and runtime path remain unchanged.
 configureMacX64UpdateChannel(autoUpdater);
 
-const STARTUP_CHECK_DELAY_MS = 5_000;
-const PERIODIC_CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 // quitAndInstall only quits once the installer has been spawned. If the app is
 // still running this long afterwards, the install bailed and the daemon we
 // stopped for it must be brought back.
@@ -119,35 +111,6 @@ function sendToLiveRenderer(
   }
 }
 
-// Single-flight guard around checkForUpdates(). With autoDownload=true the
-// startup, periodic, and manual triggers can all kick off downloads, and
-// overlapping calls have caused duplicate download warnings in the past
-// (see electronjs.org/docs/latest/api/auto-updater). Coalesce concurrent
-// callers onto the same in-flight promise.
-let inFlightCheck: Promise<unknown> | null = null;
-function checkForUpdatesOnce(): Promise<unknown> {
-  if (inFlightCheck) return inFlightCheck;
-  const p = autoUpdater
-    .checkForUpdates()
-    .then((result) => {
-      // checkForUpdates resolves as soon as metadata is fetched; the actual
-      // download (when autoDownload=true) is exposed on result.downloadPromise.
-      // Without a handler a download failure becomes an unhandled rejection
-      // in the main process — Node may terminate it on future versions.
-      void (result as { downloadPromise?: Promise<unknown> } | null)?.downloadPromise?.catch(
-        (err) => {
-          console.error("Failed to download update:", err);
-        },
-      );
-      return result;
-    })
-    .finally(() => {
-      if (inFlightCheck === p) inFlightCheck = null;
-    });
-  inFlightCheck = p;
-  return p;
-}
-
 export function setupAutoUpdater(
   getMainWindows: () => readonly BrowserWindow[],
   options: SetupAutoUpdaterOptions = {},
@@ -160,65 +123,6 @@ export function setupAutoUpdater(
   // Only Windows locks a running executable against replacement; macOS and
   // Linux keep their existing update path untouched.
   const daemonGate = platform === "win32" ? (options.daemonGate ?? null) : null;
-  const preferencesFilePath = updaterPreferencesPath(app.getPath("userData"));
-  let automaticUpdatesEnabled =
-    DEFAULT_UPDATER_PREFERENCES.automaticUpdates;
-  let startupCheckElapsed = false;
-  let startupTimer: ReturnType<typeof setTimeout> | null = null;
-  let periodicTimer: ReturnType<typeof setInterval> | null = null;
-  const preferencesReady = loadUpdaterPreferences(preferencesFilePath).then(
-    (preferences) => {
-      automaticUpdatesEnabled = preferences.automaticUpdates;
-      return preferences;
-    },
-  );
-
-  const runAutomaticCheck = (errorMessage: string): void => {
-    void preferencesReady
-      .then(() => {
-        if (!automaticUpdatesEnabled) return;
-        return checkForUpdatesOnce();
-      })
-      .catch((err) => {
-        console.error(errorMessage, err);
-      });
-  };
-
-  // Arm the startup + periodic background checks. Idempotent: an already-armed
-  // timer is left in place so re-enabling never stacks duplicate schedules.
-  const scheduleBackgroundChecks = (): void => {
-    if (startupTimer === null && !startupCheckElapsed) {
-      // Initial check shortly after startup so we don't block boot.
-      startupTimer = setTimeout(() => {
-        startupTimer = null;
-        startupCheckElapsed = true;
-        runAutomaticCheck("Failed to check for updates:");
-      }, STARTUP_CHECK_DELAY_MS);
-    }
-    if (periodicTimer === null) {
-      // Background poll so long-running sessions still pick up new releases
-      // without requiring the user to restart the app.
-      periodicTimer = setInterval(() => {
-        runAutomaticCheck("Periodic update check failed:");
-      }, PERIODIC_CHECK_INTERVAL_MS);
-    }
-  };
-
-  // Tear down the scheduled checks outright when automatic updates are turned
-  // off. Relying only on an in-callback preference guard leaves the timers
-  // running and lets a tick that races the preference flip still fire a check;
-  // clearing them makes "disabled" mean no future background work, full stop.
-  const cancelBackgroundChecks = (): void => {
-    if (startupTimer !== null) {
-      clearTimeout(startupTimer);
-      startupTimer = null;
-    }
-    if (periodicTimer !== null) {
-      clearInterval(periodicTimer);
-      periodicTimer = null;
-    }
-  };
-
   let updateReadyToInstall = false;
   let installFlow: Promise<void> | null = null;
   let quitRequested = false;
@@ -319,60 +223,12 @@ export function setupAutoUpdater(
     await installWithDaemonGate(true);
   });
 
-  ipcMain.handle(
-    "updater:get-preferences",
-    async (): Promise<UpdaterPreferences> => {
-      await preferencesReady;
-      return { automaticUpdates: automaticUpdatesEnabled };
-    },
-  );
-
-  ipcMain.handle(
-    "updater:set-automatic-updates",
-    async (_event, enabled: unknown): Promise<UpdaterPreferences> => {
-      if (typeof enabled !== "boolean") {
-        throw new TypeError("automaticUpdates must be a boolean");
-      }
-
-      await preferencesReady;
-      const wasEnabled = automaticUpdatesEnabled;
-      const preferences = { automaticUpdates: enabled };
-      await saveUpdaterPreferences(preferencesFilePath, preferences);
-      automaticUpdatesEnabled = enabled;
-
-      if (!enabled) {
-        cancelBackgroundChecks();
-      } else if (!wasEnabled) {
-        // If the startup check has already passed while the preference was off,
-        // enabling it should take effect now instead of waiting up to one hour.
-        if (startupCheckElapsed) {
-          runAutomaticCheck("Failed to check for updates:");
-        }
-        scheduleBackgroundChecks();
-      }
-
-      return preferences;
-    },
-  );
-
+  // Fork builds are unsigned and cannot update in place, so nothing calls
+  // checkForUpdates; a signed-build flag would restore those checks here.
   ipcMain.handle("updater:check", async (): Promise<ManualUpdateCheckResult> => {
     try {
-      const result = (await checkForUpdatesOnce()) as
-        | { updateInfo: { version: string }; isUpdateAvailable?: boolean }
-        | null;
-      const currentVersion = app.getVersion();
-      // Trust electron-updater's own decision rather than re-deriving it from
-      // a version-string compare. The two diverge for pre-release channels,
-      // staged rollouts, downgrades, and minimum-system-version gates — in
-      // those cases updateInfo.version differs from app.getVersion() but no
-      // `update-available` event fires, so showing "available" here would
-      // promise a download prompt that never appears.
-      return {
-        ok: true,
-        currentVersion,
-        latestVersion: result?.updateInfo.version ?? currentVersion,
-        available: result?.isUpdateAvailable ?? false,
-      };
+      await openExternalSafely(FORK_RELEASES_URL);
+      return { ok: true };
     } catch (err) {
       return {
         ok: false,
@@ -380,9 +236,4 @@ export function setupAutoUpdater(
       };
     }
   });
-
-  // Initial check shortly after startup so we don't block boot, plus a
-  // background poll for long-running sessions. Both are torn down when the
-  // user disables automatic updates and re-armed when they turn them back on.
-  scheduleBackgroundChecks();
 }

@@ -1265,15 +1265,9 @@
     "updates": {
       "title": "Mises à jour",
       "current_version": "Version actuelle",
-      "automatic_updates_title": "Mises à jour automatiques en arrière-plan",
-      "automatic_updates_description": "Vérifier peu après le lancement puis toutes les heures, et télécharger les mises à jour disponibles en arrière-plan.",
-      "automatic_updates_save_failed": "Échec de l'enregistrement des réglages de mise à jour automatique",
       "check_section_title": "Rechercher des mises à jour",
-      "check_section_description": "Vous serez invité à redémarrer une fois le téléchargement terminé.",
-      "up_to_date": "Vous avez la dernière version.",
-      "downloading": "La v{{version}} se télécharge en arrière-plan — vous serez averti quand elle sera prête à installer.",
-      "check_now": "Vérifier maintenant",
-      "checking": "Vérification…"
+      "check_section_description": "Ouvre la page Releases dans votre navigateur. Téléchargez-y la nouvelle version et installez-la par-dessus celle-ci.",
+      "check_now": "Vérifier maintenant"
     },
     "daemon": {
       "title": "Démon",
@@ -1291,8 +1285,20 @@
       "cli_status": "État du CLI",
       "cli_checking": "Vérification…",
       "cli_installed": "Le CLI multica est installé et disponible dans PATH.",
-      "cli_missing": "CLI multica introuvable. Installez-le pour activer la gestion du démon.",
+      "cli_missing": "Aucun CLI de la version fork utilisable. Installez le CLI multica de la version fork pour activer la gestion du démon.",
       "installation_guide": "Guide d'installation",
+      "cli_sources": {
+        "bundled": "Fourni avec l'application",
+        "managed": "Téléchargé précédemment",
+        "download": "Téléchargement depuis Releases",
+        "path": "multica dans le PATH"
+      },
+      "cli_results": {
+        "missing": "introuvable",
+        "not_fork": "pas la version fork ({{version}})",
+        "failed": "échec"
+      },
+      "cli_source_result": "{{source}} : {{result}}",
       "diagnostics_title": "Diagnostics",
       "state": "État",
       "uptime": "Durée de fonctionnement",

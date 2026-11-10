@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -88,7 +89,7 @@ describe("desktop quit uses the CLI lifecycle", () => {
     context.health.mockResolvedValue({ status: "running", active_task_count: 1 });
     context.dialog.mockReset().mockResolvedValue({ response: 1 });
     context.exec.mockImplementation((_bin: string, args: string[], _options: unknown, callback: (error: Error | null, output?: string) => void) => {
-      if (args[0] === "version") callback(null, '{"version":"test"}');
+      if (args[0] === "version") callback(null, '{"version":"test-fork.1"}');
       else if (args[1] === "start" && context.holdStart) context.finishStart = () => callback(null);
       else if (args[1] === "stop") context.finishStop = (error) => callback(error ?? null);
       else callback(null);

@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { useState, useEffect, useCallback, type ReactNode } from "react";
 import { AlertCircle, Info, LogIn } from "@multica/ui/icons";
 import { Button } from "@multica/ui/components/ui/button";
@@ -18,6 +19,7 @@ import {
   DAEMON_STATE_COLORS,
   formatUptime,
 } from "../../../shared/daemon-types";
+import { FORK_REPO_URL } from "../../../shared/fork";
 import { daemonStateLabel } from "./daemon-i18n";
 
 // One row inside the diagnostics block. Values that are likely to be
@@ -167,18 +169,32 @@ export function DaemonSettingsTab() {
               ? t(($) => $.desktop.daemon.cli_checking)
               : cliInstalled
                 ? t(($) => $.desktop.daemon.cli_installed)
-                : t(($) => $.desktop.daemon.cli_missing)
+                : (
+                  <>
+                    <p>{t(($) => $.desktop.daemon.cli_missing)}</p>
+                    {status.cliSources && (
+                      <ul className="mt-1">
+                        {status.cliSources.map((tried) => (
+                          <li key={tried.source}>
+                            {t(($) => $.desktop.daemon.cli_source_result, {
+                              source: t(($) => $.desktop.daemon.cli_sources[tried.source]),
+                              result: t(($) => $.desktop.daemon.cli_results[tried.result], {
+                                version: tried.version,
+                              }),
+                            })}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )
           }
         >
           {cliInstalled === false && (
             <Button
               variant="outline"
               size="sm"
-              onClick={() =>
-                window.desktopAPI.openExternal(
-                  "https://github.com/multica-ai/multica#cli-installation",
-                )
-              }
+              onClick={() => window.desktopAPI.openExternal(FORK_REPO_URL)}
             >
               {t(($) => $.desktop.daemon.installation_guide)}
             </Button>
