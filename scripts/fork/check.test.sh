@@ -7,6 +7,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 export FORK_EMAIL=dev@example.test
 export FORK_PATTERNS_FILE="$tmp/patterns"
+export FORK_REGENERATED="gen/"
 printf '# local only\nsecret-host[.]example\n' >"$FORK_PATTERNS_FILE"
 
 # Built at runtime so this file itself stays clean.
@@ -60,6 +61,11 @@ ok $hdr
 printf '{"k":1}\n' >loc/en/a.json && git commit -qam loc
 no $hdr
 printf '| `loc/*/a.json` | i18n |\n' >>MODIFICATIONS.md && git commit -qam glob
+ok $hdr
+# A file that can hold a comment needs the header; a row does not excuse it.
+printf 'package a\nfunc g() {}\n' >a.go && printf '| `a.go` | x |\n' >>MODIFICATIONS.md && git commit -qam "row only"
+no $hdr
+printf '// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.\npackage a\nfunc g() {}\n' >a.go && git commit -qam a3
 ok $hdr
 
 # --- pre-push identity ---

@@ -1,3 +1,4 @@
+-- Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 -- name: ListIssues :many
 -- involves_user_id widens the assignee filter to surface issues where the user
 -- is *indirectly* the assignee — via an owned agent or a squad they belong to /

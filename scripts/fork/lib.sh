@@ -5,6 +5,9 @@ FORK_REPO="zzzpyyy/multica"
 # release, so upstream's commits stay outside every "what did we add" range.
 FORK_BASELINE="${FORK_BASELINE:-b1ea927def6490c43bedff537b6f4ed9a47fa828}"
 FORK_EMAIL="${FORK_EMAIL:-167217540+zzzpyyy@users.noreply.github.com}"
+# Regenerated on every build, so a header comment would be overwritten (G8):
+# space-separated paths, a trailing / for a directory.
+FORK_REGENERATED="${FORK_REGENERATED:-server/pkg/db/generated/ pnpm-lock.yaml}"
 # Prefix of the one-line header every modified upstream file carries (G8).
 FORK_HEADER="Modified in $FORK_REPO (fork of multica-ai/multica"
 

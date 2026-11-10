@@ -1486,6 +1486,7 @@ type ListIssuesRow struct {
 	DuplicateOfIssueID pgtype.UUID        `json:"duplicate_of_issue_id"`
 }
 
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 // involves_user_id widens the assignee filter to surface issues where the user
 // is *indirectly* the assignee — via an owned agent or a squad they belong to /
 // lead / have an agent inside. The semantics intentionally exclude direct

@@ -1,3 +1,4 @@
+-- Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 -- Workspace deletion is application-owned. These statements form a fixed,
 -- bottom-up deletion plan; the legacy foreign keys remain only as a
 -- compatibility safety net during the expand phase.

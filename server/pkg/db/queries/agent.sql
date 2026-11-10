@@ -1,3 +1,4 @@
+-- Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 -- name: ListAgents :many
 SELECT * FROM agent
 WHERE workspace_id = $1 AND archived_at IS NULL AND kind = 'user'
