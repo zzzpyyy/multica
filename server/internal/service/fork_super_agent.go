@@ -8,7 +8,11 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
+	"github.com/multica-ai/multica/server/internal/events"
+	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
+	"github.com/multica-ai/multica/server/pkg/dbid"
+	"github.com/multica-ai/multica/server/pkg/protocol"
 )
 
 // Fork (zzzpyyy/multica), B: the built-in super-agent. It talks to the user,
@@ -53,4 +57,33 @@ var ErrSuperAgentNotAssignable = errors.New("super_agent_not_assignable")
 func (s *TaskService) isSuperAgentTask(ctx context.Context, task db.AgentTaskQueue) bool {
 	agent, err := s.Queries.GetAgent(ctx, task.AgentID)
 	return err == nil && IsSuperAgent(agent)
+}
+
+// PostSuperAgentMessage writes an assistant message with no task — the
+// server's own words in the super-agent conversation ("已转到 …", pushes) —
+// and announces it on chat:message so unread counts move (F7).
+func (s *TaskService) PostSuperAgentMessage(ctx context.Context, session db.ChatSession, content string) (db.ChatMessage, error) {
+	msg, err := s.Queries.CreateChatMessage(ctx, db.CreateChatMessageParams{
+		ID: dbid.NewV7(), ChatSessionID: session.ID, Role: "assistant", Content: content,
+	})
+	if err != nil {
+		return db.ChatMessage{}, err
+	}
+	s.publishSuperAgentMessage(session, msg)
+	return msg, nil
+}
+
+func (s *TaskService) publishSuperAgentMessage(session db.ChatSession, msg db.ChatMessage) {
+	if s.Bus == nil {
+		return
+	}
+	sid := util.UUIDToString(session.ID)
+	s.Bus.Publish(events.Event{
+		Type: protocol.EventChatMessage, WorkspaceID: util.UUIDToString(session.WorkspaceID),
+		ActorType: "system", ChatSessionID: sid, ChatSessionOwnerID: util.UUIDToString(session.CreatorID),
+		Payload: protocol.ChatMessagePayload{
+			ChatSessionID: sid, MessageID: util.UUIDToString(msg.ID), Role: "assistant",
+			Content: msg.Content, CreatedAt: util.TimestampToString(msg.CreatedAt),
+		},
+	})
 }

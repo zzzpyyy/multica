@@ -11,6 +11,109 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createSuperAgentAction = `-- name: CreateSuperAgentAction :one
+INSERT INTO super_agent_action (chat_session_id, chat_message_id, kind, payload, status, result)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, chat_session_id, chat_message_id, kind, payload, status, result, created_at
+`
+
+type CreateSuperAgentActionParams struct {
+	ChatSessionID pgtype.UUID `json:"chat_session_id"`
+	ChatMessageID pgtype.UUID `json:"chat_message_id"`
+	Kind          string      `json:"kind"`
+	Payload       []byte      `json:"payload"`
+	Status        string      `json:"status"`
+	Result        []byte      `json:"result"`
+}
+
+func (q *Queries) CreateSuperAgentAction(ctx context.Context, arg CreateSuperAgentActionParams) (SuperAgentAction, error) {
+	row := q.db.QueryRow(ctx, createSuperAgentAction,
+		arg.ChatSessionID,
+		arg.ChatMessageID,
+		arg.Kind,
+		arg.Payload,
+		arg.Status,
+		arg.Result,
+	)
+	var i SuperAgentAction
+	err := row.Scan(
+		&i.ID,
+		&i.ChatSessionID,
+		&i.ChatMessageID,
+		&i.Kind,
+		&i.Payload,
+		&i.Status,
+		&i.Result,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const expirePendingSuperAgentCards = `-- name: ExpirePendingSuperAgentCards :exec
+UPDATE super_agent_action SET status = 'expired'
+WHERE chat_session_id = $1 AND status = 'pending'
+  AND kind IN ('create_issues', 'add_instances') AND id <> $2
+`
+
+type ExpirePendingSuperAgentCardsParams struct {
+	ChatSessionID pgtype.UUID `json:"chat_session_id"`
+	KeepID        pgtype.UUID `json:"keep_id"`
+}
+
+// A new card makes the session's older pending cards stale (B7).
+func (q *Queries) ExpirePendingSuperAgentCards(ctx context.Context, arg ExpirePendingSuperAgentCardsParams) error {
+	_, err := q.db.Exec(ctx, expirePendingSuperAgentCards, arg.ChatSessionID, arg.KeepID)
+	return err
+}
+
+const finishSuperAgentAction = `-- name: FinishSuperAgentAction :one
+UPDATE super_agent_action SET status = $1, result = $2
+WHERE id = $3
+RETURNING id, chat_session_id, chat_message_id, kind, payload, status, result, created_at
+`
+
+type FinishSuperAgentActionParams struct {
+	Status string      `json:"status"`
+	Result []byte      `json:"result"`
+	ID     pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) FinishSuperAgentAction(ctx context.Context, arg FinishSuperAgentActionParams) (SuperAgentAction, error) {
+	row := q.db.QueryRow(ctx, finishSuperAgentAction, arg.Status, arg.Result, arg.ID)
+	var i SuperAgentAction
+	err := row.Scan(
+		&i.ID,
+		&i.ChatSessionID,
+		&i.ChatMessageID,
+		&i.Kind,
+		&i.Payload,
+		&i.Status,
+		&i.Result,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getSuperAgentAction = `-- name: GetSuperAgentAction :one
+SELECT id, chat_session_id, chat_message_id, kind, payload, status, result, created_at FROM super_agent_action WHERE id = $1
+`
+
+func (q *Queries) GetSuperAgentAction(ctx context.Context, id pgtype.UUID) (SuperAgentAction, error) {
+	row := q.db.QueryRow(ctx, getSuperAgentAction, id)
+	var i SuperAgentAction
+	err := row.Scan(
+		&i.ID,
+		&i.ChatSessionID,
+		&i.ChatMessageID,
+		&i.Kind,
+		&i.Payload,
+		&i.Status,
+		&i.Result,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getSuperAgentSessionForMember = `-- name: GetSuperAgentSessionForMember :one
 SELECT s.id, s.workspace_id, s.agent_id, s.creator_id, s.title, s.session_id, s.work_dir, s.status, s.created_at, s.updated_at, s.unread_since, s.runtime_id, s.last_read_at, s.is_agent_intro, s.pinned_at, s.project_id, s.explicitly_created_at FROM chat_session s
 JOIN agent a ON a.id = s.agent_id
@@ -87,6 +190,42 @@ func (q *Queries) ListPendingSuperAgentActions(ctx context.Context, chatSessionI
 	return items, nil
 }
 
+const listPendingSuperAgentDirectActionsForTask = `-- name: ListPendingSuperAgentDirectActionsForTask :many
+SELECT a.id, a.chat_session_id, a.chat_message_id, a.kind, a.payload, a.status, a.result, a.created_at FROM super_agent_action a
+JOIN chat_message m ON m.id = a.chat_message_id
+WHERE m.task_id = $1 AND a.status = 'pending' AND a.kind IN ('forward', 'set_status')
+`
+
+// forward / set_status written by a finished chat turn, not yet executed.
+func (q *Queries) ListPendingSuperAgentDirectActionsForTask(ctx context.Context, taskID pgtype.UUID) ([]SuperAgentAction, error) {
+	rows, err := q.db.Query(ctx, listPendingSuperAgentDirectActionsForTask, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SuperAgentAction{}
+	for rows.Next() {
+		var i SuperAgentAction
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatSessionID,
+			&i.ChatMessageID,
+			&i.Kind,
+			&i.Payload,
+			&i.Status,
+			&i.Result,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecentSuperAgentPushes = `-- name: ListRecentSuperAgentPushes :many
 SELECT m.content, m.created_at
 FROM super_agent_push p
@@ -111,6 +250,41 @@ func (q *Queries) ListRecentSuperAgentPushes(ctx context.Context, chatSessionID 
 	for rows.Next() {
 		var i ListRecentSuperAgentPushesRow
 		if err := rows.Scan(&i.Content, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSuperAgentCards = `-- name: ListSuperAgentCards :many
+SELECT id, chat_session_id, chat_message_id, kind, payload, status, result, created_at FROM super_agent_action
+WHERE chat_session_id = $1 AND kind IN ('create_issues', 'add_instances')
+ORDER BY created_at ASC, id ASC
+`
+
+func (q *Queries) ListSuperAgentCards(ctx context.Context, chatSessionID pgtype.UUID) ([]SuperAgentAction, error) {
+	rows, err := q.db.Query(ctx, listSuperAgentCards, chatSessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SuperAgentAction{}
+	for rows.Next() {
+		var i SuperAgentAction
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatSessionID,
+			&i.ChatMessageID,
+			&i.Kind,
+			&i.Payload,
+			&i.Status,
+			&i.Result,
+			&i.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -171,4 +345,51 @@ func (q *Queries) ListSuperAgentQuestionsByStatus(ctx context.Context, arg ListS
 		return nil, err
 	}
 	return items, nil
+}
+
+const markSuperAgentQuestionsForwarded = `-- name: MarkSuperAgentQuestionsForwarded :exec
+UPDATE super_agent_question q SET status = 'forwarded'
+FROM comment c
+WHERE q.comment_id = c.id AND q.chat_session_id = $1
+  AND q.status = 'asked' AND c.issue_id = $2
+`
+
+type MarkSuperAgentQuestionsForwardedParams struct {
+	ChatSessionID pgtype.UUID `json:"chat_session_id"`
+	IssueID       pgtype.UUID `json:"issue_id"`
+}
+
+func (q *Queries) MarkSuperAgentQuestionsForwarded(ctx context.Context, arg MarkSuperAgentQuestionsForwardedParams) error {
+	_, err := q.db.Exec(ctx, markSuperAgentQuestionsForwarded, arg.ChatSessionID, arg.IssueID)
+	return err
+}
+
+const transitionSuperAgentAction = `-- name: TransitionSuperAgentAction :one
+UPDATE super_agent_action SET status = $1
+WHERE id = $2 AND status = $3
+RETURNING id, chat_session_id, chat_message_id, kind, payload, status, result, created_at
+`
+
+type TransitionSuperAgentActionParams struct {
+	ToStatus   string      `json:"to_status"`
+	ID         pgtype.UUID `json:"id"`
+	FromStatus string      `json:"from_status"`
+}
+
+// Compare-and-set: only the caller that finds `from` wins (B3: a double
+// click confirms once).
+func (q *Queries) TransitionSuperAgentAction(ctx context.Context, arg TransitionSuperAgentActionParams) (SuperAgentAction, error) {
+	row := q.db.QueryRow(ctx, transitionSuperAgentAction, arg.ToStatus, arg.ID, arg.FromStatus)
+	var i SuperAgentAction
+	err := row.Scan(
+		&i.ID,
+		&i.ChatSessionID,
+		&i.ChatMessageID,
+		&i.Kind,
+		&i.Payload,
+		&i.Status,
+		&i.Result,
+		&i.CreatedAt,
+	)
+	return i, err
 }

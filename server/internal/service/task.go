@@ -4908,6 +4908,11 @@ func (s *TaskService) writeChatCompletionOutcome(ctx context.Context, qtx *db.Qu
 	// pre-upgrade session to the retired, lower-quality in-band suggestions and
 	// suppress the pass that would have replaced them.
 	body, _ = splitChatQuickActions(body)
+	// Fork (B): strip and check the super-agent's action block (plan 2.4).
+	var superAction *superPlan
+	if s.isSuperAgentTask(ctx, task) {
+		body, superAction = s.planSuperAction(ctx, qtx, task, body)
+	}
 	isEmpty := strings.TrimSpace(body) == ""
 
 	// MUL-4899 completion-boundary observation. Measures whether the delivery
@@ -4998,6 +5003,11 @@ func (s *TaskService) writeChatCompletionOutcome(ctx context.Context, qtx *db.Qu
 	row, err := createAssistantChatMessage(ctx, qtx, params)
 	if err != nil {
 		return nil, err
+	}
+	if superAction != nil {
+		if err := writeSuperAction(ctx, qtx, row, superAction); err != nil {
+			return nil, err
+		}
 	}
 
 	// Bind the task's still-unclaimed attachments to the reply we just wrote.
