@@ -69,6 +69,11 @@ ok sh -c "echo 'refs/heads/f $(git rev-parse HEAD) refs/heads/f $z' | bash $hook
 git -c user.email=me@corp.test commit -q --allow-empty -m other
 no sh -c "echo 'refs/heads/f $(git rev-parse HEAD) refs/heads/f $z' | bash $hook"
 ok sh -c "echo 'refs/heads/f $z refs/heads/f $z' | bash $hook" # deletion
+git reset -q --hard HEAD~1
+printf '{"k":2}\n' >loc/en/b.json && git add loc && git commit -qm "new file is fine"
+ok sh -c "echo 'refs/heads/f $(git rev-parse HEAD) refs/heads/f $z' | bash $hook"
+printf 'package a\nfunc g() {}\n' >a.go && git commit -qam "drop header"
+no sh -c "echo 'refs/heads/f $(git rev-parse HEAD) refs/heads/f $z' | bash $hook" # G8
 
 # --- check-public: artifacts ---
 mk() { # <dir> <archive> <content>

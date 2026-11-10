@@ -4,7 +4,8 @@
 # (or plain `git config core.hooksPath ...` when worktreeConfig is off).
 #
 # For every ref being pushed, every commit the fork added on top of upstream
-# must be authored and committed as $FORK_EMAIL, and must pass check-public.sh.
+# must be authored and committed as $FORK_EMAIL and pass check-public.sh, and
+# the pushed tree must pass check-modified-headers.sh.
 # What reaches a public repo cannot be taken back, so this runs before the push.
 set -euo pipefail
 root=$(git rev-parse --show-toplevel)
@@ -24,6 +25,8 @@ while read -r _lref lsha _rref _rsha; do
     status=1
   fi
   "$root/scripts/fork/check-public.sh" "$lsha" >/dev/null || status=1
+  # G8 is fixable after a push, but GitHub Actions may not run, so check here too.
+  "$root/scripts/fork/check-modified-headers.sh" "$lsha" >/dev/null || status=1
 done
 
 exit $status
