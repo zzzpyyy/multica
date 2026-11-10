@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package cli
 
 import (
@@ -33,7 +35,7 @@ func TestReleaseSourceOverridesGitHub(t *testing.T) {
 
 func TestFetchLatestReleaseUsesConfiguredAPI(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/repos/multica-ai/multica/releases/latest" {
+		if r.URL.Path != "/repos/zzzpyyy/multica/releases/latest" {
 			http.NotFound(w, r)
 			return
 		}
@@ -49,5 +51,27 @@ func TestFetchLatestReleaseUsesConfiguredAPI(t *testing.T) {
 	}
 	if got.TagName != "v9.8.7" {
 		t.Fatalf("release tag = %q, want v9.8.7", got.TagName)
+	}
+}
+
+// Server-pushed updates resolve a specific tag; it must come from the fork too.
+func TestFetchReleaseByTagUsesForkRepo(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/repos/zzzpyyy/multica/releases/tags/v0.8.1-fork.1" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(GitHubRelease{TagName: "v0.8.1-fork.1"})
+	}))
+	defer server.Close()
+	t.Setenv(releaseAPIBaseURLEnv, server.URL)
+
+	got, err := fetchReleaseByTag("v0.8.1-fork.1")
+	if err != nil {
+		t.Fatalf("fetchReleaseByTag() error = %v", err)
+	}
+	if got.TagName != "v0.8.1-fork.1" {
+		t.Fatalf("release tag = %q", got.TagName)
 	}
 }

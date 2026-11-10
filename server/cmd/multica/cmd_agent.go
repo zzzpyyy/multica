@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package main
 
 import (
@@ -288,11 +290,6 @@ func newAPIClient(cmd *cobra.Command) (*cli.APIClient, error) {
 	return client, nil
 }
 
-const (
-	defaultCloudServerURL = "https://api.multica.ai"
-	defaultCloudAppURL    = "https://multica.ai"
-)
-
 func tryResolveServerURL(cmd *cobra.Command) string {
 	if val := tryResolveExplicitServerURL(cmd); val != "" {
 		return val
@@ -353,11 +350,13 @@ func resolveHumanServerURL(cmd *cobra.Command) string {
 	return "" // unreachable
 }
 
-func resolveLoginTokenServerURL(cmd *cobra.Command) string {
+// The fork has no default server: falling back to Multica Cloud would send a
+// token issued by a self-hosted fork server to api.multica.ai.
+func resolveLoginTokenServerURL(cmd *cobra.Command) (string, error) {
 	if val := tryResolveHumanServerURL(cmd); val != "" {
-		return val
+		return val, nil
 	}
-	return defaultCloudServerURL
+	return "", errNoServerConfigured
 }
 
 func normalizeAPIBaseURL(raw string) string {

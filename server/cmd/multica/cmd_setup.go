@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package main
 
 import (
@@ -19,12 +21,9 @@ import (
 var setupCmd = &cobra.Command{
 	Use:   "setup",
 	Short: "Configure the CLI, authenticate, and start the daemon",
-	Long: `Configures the CLI to connect to Multica Cloud (multica.ai), then
-authenticates via browser and starts the agent daemon.
-
-If a configuration already exists, you will be prompted before overwriting.
-
-Use 'multica setup self-host' to connect to a self-hosted server instead.
+	Long: `This fork only connects to self-hosted servers: use
+'multica setup self-host'. Plain 'multica setup' and 'multica setup cloud'
+exit with an error instead of configuring Multica Cloud.
 
 If you run this command over SSH on a remote machine, keep the localhost
 callback and follow the SSH tunnel hint printed during browser login. If your
@@ -38,16 +37,9 @@ Use --profile to create an isolated configuration for a separate environment:
 
 var setupCloudCmd = &cobra.Command{
 	Use:   "cloud",
-	Short: "Configure the CLI for Multica Cloud (multica.ai)",
-	Long: `Explicitly configures the CLI to connect to Multica Cloud (multica.ai).
-
-If you run this command over SSH on a remote machine, keep the localhost
-callback and follow the SSH tunnel hint printed during browser login. If your
-browser can reach this CLI directly on a private network address, pass
---callback-host <host-or-ip>.
-
-This is equivalent to running 'multica setup' without a subcommand.`,
-	RunE: runSetupCloud,
+	Short: "Not available in this fork; use 'multica setup self-host'",
+	Long:  `Not available in this fork. Use 'multica setup self-host'.`,
+	RunE:  runSetupCloud,
 }
 
 var setupSelfHostCmd = &cobra.Command{
@@ -138,46 +130,14 @@ func formatURLChange(oldVal, newVal string) string {
 	return oldVal
 }
 
+var errNoServerConfigured = fmt.Errorf("no server configured: this fork has no default server. Run 'multica setup self-host --server-url <url>' first, or pass --server-url / MULTICA_SERVER_URL")
+
+// runSetupCloud refuses: the fork never configures Multica Cloud (P8).
 func runSetupCloud(cmd *cobra.Command, args []string) error {
 	if err := requireHumanLocalCommand("setup"); err != nil {
 		return err
 	}
-	profile := resolveProfile(cmd)
-
-	cfg := cli.CLIConfig{
-		ServerURL: defaultCloudServerURL,
-		AppURL:    defaultCloudAppURL,
-	}
-
-	ok, err := confirmOverwrite(profile, cfg.ServerURL, cfg.AppURL)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return nil
-	}
-
-	if err := cli.SaveCLIConfigForProfile(cfg, profile); err != nil {
-		return fmt.Errorf("save config: %w", err)
-	}
-
-	fmt.Fprintln(os.Stderr, "Configured for Multica Cloud (https://multica.ai).")
-	fmt.Fprintf(os.Stderr, "  server_url: %s\n", cfg.ServerURL)
-	fmt.Fprintf(os.Stderr, "  app_url:    %s\n", cfg.AppURL)
-	printConfigLocation(profile)
-
-	// Authenticate.
-	fmt.Fprintln(os.Stderr, "")
-	if err := runLogin(cmd, args); err != nil {
-		return err
-	}
-
-	if err := runDaemonAfterSetup(cmd, args); err != nil {
-		return fmt.Errorf("start or restart daemon: %w", err)
-	}
-	fmt.Fprintln(os.Stderr, "\n✓ Setup complete! Your machine is now connected to Multica.")
-
-	return nil
+	return fmt.Errorf("this fork does not connect to Multica Cloud; use 'multica setup self-host --server-url <url>'")
 }
 
 func runSetupSelfHost(cmd *cobra.Command, args []string) error {

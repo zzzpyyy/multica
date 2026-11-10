@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package main
 
 import (
@@ -19,12 +21,36 @@ func newLoginTestCmd() *cobra.Command {
 	return cmd
 }
 
-func TestResolveLoginTokenServerURLDefaultsToCloud(t *testing.T) {
+// P8: with no server configured, `login --token` must fail instead of
+// sending the token to Multica Cloud.
+func TestResolveLoginTokenServerURLRefusesWithoutServer(t *testing.T) {
 	redirectTestHome(t, t.TempDir())
 	t.Setenv("MULTICA_SERVER_URL", "")
 
-	if got := resolveLoginTokenServerURL(newLoginTestCmd()); got != defaultCloudServerURL {
-		t.Fatalf("resolveLoginTokenServerURL() = %q, want %q", got, defaultCloudServerURL)
+	got, err := resolveLoginTokenServerURL(newLoginTestCmd())
+	if err == nil || got != "" {
+		t.Fatalf("resolveLoginTokenServerURL() = %q, %v; want an error and no URL", got, err)
+	}
+}
+
+func TestRunLoginTokenWithoutServerSendsNothing(t *testing.T) {
+	t.Chdir(t.TempDir())
+	redirectTestHome(t, t.TempDir())
+	t.Setenv("MULTICA_SERVER_URL", "")
+	t.Setenv("MULTICA_TOKEN", "")
+	t.Setenv("MULTICA_AGENT_ID", "")
+	t.Setenv("MULTICA_TASK_ID", "")
+	t.Setenv(cli.TaskConfigRootEnv, "")
+
+	if err := runAuthLoginToken(newLoginTestCmd(), "mul_"+strings.Repeat("a", 40)); err == nil {
+		t.Fatal("runAuthLoginToken succeeded without a configured server")
+	}
+}
+
+func TestSetupCloudRefuses(t *testing.T) {
+	redirectTestHome(t, t.TempDir())
+	if err := runSetupCloud(newLoginTestCmd(), nil); err == nil {
+		t.Fatal("runSetupCloud succeeded; the fork must not configure Multica Cloud")
 	}
 }
 
@@ -46,8 +72,8 @@ func TestResolveLoginTokenServerURLPrefersConfiguredServer(t *testing.T) {
 		t.Fatalf("SaveCLIConfig: %v", err)
 	}
 
-	if got := resolveLoginTokenServerURL(cmd); got != "https://api.example.test" {
-		t.Fatalf("resolveLoginTokenServerURL() = %q, want configured server", got)
+	if got, err := resolveLoginTokenServerURL(cmd); err != nil || got != "https://api.example.test" {
+		t.Fatalf("resolveLoginTokenServerURL() = %q, %v; want configured server", got, err)
 	}
 }
 

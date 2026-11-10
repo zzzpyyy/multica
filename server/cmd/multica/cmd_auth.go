@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package main
 
 import (
@@ -456,7 +458,10 @@ func runAuthLoginToken(cmd *cobra.Command, providedToken string) error {
 		return err
 	}
 
-	serverURL := resolveLoginTokenServerURL(cmd)
+	serverURL, err := resolveLoginTokenServerURL(cmd)
+	if err != nil {
+		return err
+	}
 	client := cli.NewAPIClient(serverURL, "", token)
 
 	ctx, cancel := cli.APIContext(context.Background())
@@ -475,9 +480,6 @@ func runAuthLoginToken(cmd *cobra.Command, providedToken string) error {
 	cfg.WorkspaceID = ""
 	cfg.Token = token
 	cfg.ServerURL = serverURL
-	if cfg.AppURL == "" && serverURL == defaultCloudServerURL {
-		cfg.AppURL = defaultCloudAppURL
-	}
 	if err := cli.SaveCLIConfigForProfile(cfg, profile); err != nil {
 		return fmt.Errorf("failed to save config: %w", err)
 	}
