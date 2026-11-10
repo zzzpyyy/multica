@@ -65,3 +65,27 @@ ORDER BY (atq.priority >= 10) DESC,
 
 -- name: GetAgentTaskBatch :one
 SELECT * FROM agent_task_batch WHERE id = $1;
+
+-- name: SettleAgentTaskBatch :one
+-- Exactly one caller wins; only the winner wakes the merge party (D3).
+UPDATE agent_task_batch SET settled_at = now()
+WHERE id = $1 AND settled_at IS NULL
+RETURNING *;
+
+-- name: ListCommentsBySourceTasks :many
+SELECT id, source_task_id FROM comment
+WHERE issue_id = @issue_id AND source_task_id = ANY(@task_ids::uuid[]) AND deleted_at IS NULL
+ORDER BY created_at ASC, id ASC;
+
+-- name: ListSettleableTaskBatches :many
+-- Backstop for a lost task event: unsettled batches whose every attempt is
+-- terminal. A failed attempt with a retry pending has a non-terminal child.
+SELECT b.id FROM agent_task_batch b
+WHERE b.settled_at IS NULL
+  AND b.created_at < now() - interval '2 minutes'
+  AND NOT EXISTS (
+      SELECT 1 FROM agent_task_queue t
+      WHERE t.batch_id = b.id AND t.status NOT IN ('completed', 'failed', 'cancelled')
+  )
+ORDER BY b.created_at ASC
+LIMIT @max_batches;

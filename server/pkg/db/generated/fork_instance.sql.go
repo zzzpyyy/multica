@@ -351,6 +351,42 @@ func (q *Queries) ListBatchTasks(ctx context.Context, batchIds []pgtype.UUID) ([
 	return items, nil
 }
 
+const listCommentsBySourceTasks = `-- name: ListCommentsBySourceTasks :many
+SELECT id, source_task_id FROM comment
+WHERE issue_id = $1 AND source_task_id = ANY($2::uuid[]) AND deleted_at IS NULL
+ORDER BY created_at ASC, id ASC
+`
+
+type ListCommentsBySourceTasksParams struct {
+	IssueID pgtype.UUID   `json:"issue_id"`
+	TaskIds []pgtype.UUID `json:"task_ids"`
+}
+
+type ListCommentsBySourceTasksRow struct {
+	ID           pgtype.UUID `json:"id"`
+	SourceTaskID pgtype.UUID `json:"source_task_id"`
+}
+
+func (q *Queries) ListCommentsBySourceTasks(ctx context.Context, arg ListCommentsBySourceTasksParams) ([]ListCommentsBySourceTasksRow, error) {
+	rows, err := q.db.Query(ctx, listCommentsBySourceTasks, arg.IssueID, arg.TaskIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCommentsBySourceTasksRow{}
+	for rows.Next() {
+		var i ListCommentsBySourceTasksRow
+		if err := rows.Scan(&i.ID, &i.SourceTaskID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listIssueTaskBatches = `-- name: ListIssueTaskBatches :many
 SELECT id, workspace_id, issue_id, agent_id, splits, requested_by_type, requested_by_id, settled_at, created_at FROM agent_task_batch
 WHERE issue_id = $1 AND workspace_id = $2
@@ -390,4 +426,62 @@ func (q *Queries) ListIssueTaskBatches(ctx context.Context, arg ListIssueTaskBat
 		return nil, err
 	}
 	return items, nil
+}
+
+const listSettleableTaskBatches = `-- name: ListSettleableTaskBatches :many
+SELECT b.id FROM agent_task_batch b
+WHERE b.settled_at IS NULL
+  AND b.created_at < now() - interval '2 minutes'
+  AND NOT EXISTS (
+      SELECT 1 FROM agent_task_queue t
+      WHERE t.batch_id = b.id AND t.status NOT IN ('completed', 'failed', 'cancelled')
+  )
+ORDER BY b.created_at ASC
+LIMIT $1
+`
+
+// Backstop for a lost task event: unsettled batches whose every attempt is
+// terminal. A failed attempt with a retry pending has a non-terminal child.
+func (q *Queries) ListSettleableTaskBatches(ctx context.Context, maxBatches int32) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listSettleableTaskBatches, maxBatches)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const settleAgentTaskBatch = `-- name: SettleAgentTaskBatch :one
+UPDATE agent_task_batch SET settled_at = now()
+WHERE id = $1 AND settled_at IS NULL
+RETURNING id, workspace_id, issue_id, agent_id, splits, requested_by_type, requested_by_id, settled_at, created_at
+`
+
+// Exactly one caller wins; only the winner wakes the merge party (D3).
+func (q *Queries) SettleAgentTaskBatch(ctx context.Context, id pgtype.UUID) (AgentTaskBatch, error) {
+	row := q.db.QueryRow(ctx, settleAgentTaskBatch, id)
+	var i AgentTaskBatch
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.IssueID,
+		&i.AgentID,
+		&i.Splits,
+		&i.RequestedByType,
+		&i.RequestedByID,
+		&i.SettledAt,
+		&i.CreatedAt,
+	)
+	return i, err
 }

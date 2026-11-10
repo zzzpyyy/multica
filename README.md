@@ -174,6 +174,7 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 | `server/internal/service/task.go` | 领取后如果这个角色还有排队行和名额，再唤醒一次 daemon；实例的重试不看普通运行的待处理名额；认得新的唯一索引名 | D1、D2 |
 | `server/cmd/migrate/main.go` | 登记 9002–9004 的并发索引清理 | D |
 | `server/cmd/server/router.go` | 注册 `POST`/`GET /api/issues/{id}/instances` | D1、D5、D9、D11、D14、D15 |
+| `server/cmd/server/main.go` | 注册实例批次的结算监听和 30 秒兜底扫描 | D3、D10、D14 |
 | `server/internal/handler/agent.go`、`daemon.go` | 领取响应加 `instance` 字段；没声明 `multica-fork-v1` 的 daemon 领到实例行时，这次领取失败（`fork_daemon_required`） | D2、D3 |
 | `server/internal/handler/issue.go`、`issue_move.go` | 实例运行改状态、负责人、父任务时返回 403 `instance_run_readonly`（单个、批量、拖动三处） | D4 |
 | `server/internal/handler/comment.go` | 实例发的评论不走隐式兜底，不唤醒负责人或 leader | D3 |

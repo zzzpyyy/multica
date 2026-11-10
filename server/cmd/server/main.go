@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package main
 
 import (
@@ -730,6 +732,7 @@ func main() {
 	// claim until the cache TTL expires.
 	taskSvc, autopilotSvc := backgroundServices(h)
 	registerAutopilotListeners(bus, autopilotSvc)
+	registerForkInstanceListeners(bus, taskSvc) // Fork (D)
 
 	// Construct a LivenessStore that mirrors the one wired into the HTTP
 	// handler. Both the heartbeat write path (handler) and the sweeper read
@@ -850,6 +853,9 @@ func main() {
 	}
 	if err := schedulerMgr.Register(scheduler.ChildEventSweepJob(&service.IssueWakeupService{Tasks: taskSvc})); err != nil {
 		slog.Error("scheduler: register child-done sweep", "error", err)
+	}
+	if err := schedulerMgr.Register(scheduler.InstanceBatchSettleSweepJob(taskSvc)); err != nil { // Fork (D)
+		slog.Error("scheduler: register instance batch settle sweep", "error", err)
 	}
 	if err := schedulerMgr.Register(scheduler.AutopilotScheduleDispatchJob(pool, queries, autopilotSvc)); err != nil {
 		slog.Warn("scheduler: failed to register autopilot_schedule_dispatch job", "error", err)
