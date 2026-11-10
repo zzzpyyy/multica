@@ -118,6 +118,7 @@ import { collectThreadParticipants, collectThreadReplies, deriveThreadResolution
 import { IssueAgentHeaderChip } from "./issue-agent-header-chip";
 import { IssueWakeupHeaderChip } from "./issue-wakeup-header-chip";
 import { ExecutionLogSection } from "./execution-log-section";
+import { InstancesSection } from "./instances-section";
 import { WakeupsSection } from "./wakeups-section";
 import { QuickActionsSection } from "./quick-actions-section";
 import { PluginPanelSection } from "../../plugins";
@@ -3813,6 +3814,8 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
               </IssueContextMenuProvider>
             );
           })()}
+
+          <InstancesSection issueId={id} />
 
           <div className="my-8 border-t" />
 

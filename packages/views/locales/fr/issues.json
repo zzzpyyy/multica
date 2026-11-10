@@ -977,6 +977,20 @@
     "group_unstaged": "Sans étape",
     "children_label": "Sous-tâches de {{identifier}}"
   },
+  "instances": {
+    "section": "Instances",
+    "index": "Instance {{index}}/{{total}}",
+    "priority": "Prioritaire",
+    "queue_position": "N° {{position}} dans la file",
+    "reason": {
+      "role_full": "Rôle au complet ({{running}}/{{limit}})",
+      "runtime_full": "Runtime au complet",
+      "runtime_offline": "Runtime hors ligne",
+      "waiting_dispatch": "En attente de prise en charge"
+    },
+    "session": "Session {{id}}",
+    "card_counts": "{{agent}} en cours {{running}} · en attente {{queued}}"
+  },
   "actions": {
     "rename_issue": "Renommer la tâche",
     "status": "Statut",

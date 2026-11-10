@@ -977,6 +977,20 @@
     "group_unstaged": "No stage",
     "children_label": "Sub-issues of {{identifier}}"
   },
+  "instances": {
+    "section": "Instances",
+    "index": "Instance {{index}}/{{total}}",
+    "priority": "Priority",
+    "queue_position": "No. {{position}} in queue",
+    "reason": {
+      "role_full": "Role at capacity ({{running}}/{{limit}})",
+      "runtime_full": "Runtime at capacity",
+      "runtime_offline": "Runtime offline",
+      "waiting_dispatch": "Waiting for pickup"
+    },
+    "session": "Session {{id}}",
+    "card_counts": "{{agent}} running {{running}} · queued {{queued}}"
+  },
   "actions": {
     "rename_issue": "Rename issue",
     "status": "Status",

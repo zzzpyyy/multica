@@ -932,6 +932,20 @@
     "group_unstaged": "未分阶段",
     "children_label": "{{identifier}} 的子任务"
   },
+  "instances": {
+    "section": "实例",
+    "index": "实例 {{index}}/{{total}}",
+    "priority": "优先",
+    "queue_position": "第 {{position}} 位",
+    "reason": {
+      "role_full": "角色名额已满（{{running}}/{{limit}}）",
+      "runtime_full": "运行环境已满",
+      "runtime_offline": "运行环境离线",
+      "waiting_dispatch": "等待领取"
+    },
+    "session": "会话 {{id}}",
+    "card_counts": "{{agent}} 运行 {{running}} · 排队 {{queued}}"
+  },
   "actions": {
     "rename_issue": "重命名任务",
     "status": "状态",

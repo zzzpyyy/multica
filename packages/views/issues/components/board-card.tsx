@@ -36,6 +36,7 @@ import { nestedSummary, type NestedSummary } from "@multica/core/issues";
 import { useNestedBoard } from "./nested-board/use-nested-children";
 import { NestedCardSummary } from "./nested-board/card-summary";
 import { NestedChildrenList } from "./nested-board/children-list";
+import { IssueAgentRunCounts } from "./issue-agent-run-counts";
 import {
   PEEK_TARGET_ATTR,
   useIsIssuePeeked,
@@ -271,6 +272,7 @@ export const BoardCardContent = memo(function BoardCardContent({
           onToggle={nested.onToggle}
         />
       )}
+      <IssueAgentRunCounts issueId={issue.id} />
 
       {/* Meta row: assignee (left), start date, due date, child progress (right) */}
       {showMetaRow && (

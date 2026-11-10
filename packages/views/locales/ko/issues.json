@@ -932,6 +932,20 @@
     "group_unstaged": "단계 없음",
     "children_label": "{{identifier}}의 하위 태스크"
   },
+  "instances": {
+    "section": "인스턴스",
+    "index": "인스턴스 {{index}}/{{total}}",
+    "priority": "우선",
+    "queue_position": "대기 순서 {{position}}번",
+    "reason": {
+      "role_full": "역할 슬롯이 가득 참 ({{running}}/{{limit}})",
+      "runtime_full": "런타임이 가득 참",
+      "runtime_offline": "런타임 오프라인",
+      "waiting_dispatch": "할당 대기 중"
+    },
+    "session": "세션 {{id}}",
+    "card_counts": "{{agent}} 실행 {{running}} · 대기 {{queued}}"
+  },
   "actions": {
     "rename_issue": "태스크 이름 변경",
     "status": "상태",

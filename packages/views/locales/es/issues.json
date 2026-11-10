@@ -891,6 +891,20 @@
     "group_unstaged": "Sin etapa",
     "children_label": "Subtareas de {{identifier}}"
   },
+  "instances": {
+    "section": "Instancias",
+    "index": "Instancia {{index}}/{{total}}",
+    "priority": "Prioritaria",
+    "queue_position": "N.º {{position}} en la cola",
+    "reason": {
+      "role_full": "Rol al completo ({{running}}/{{limit}})",
+      "runtime_full": "Runtime al completo",
+      "runtime_offline": "Runtime sin conexión",
+      "waiting_dispatch": "Esperando asignación"
+    },
+    "session": "Sesión {{id}}",
+    "card_counts": "{{agent}} en ejecución {{running}} · en cola {{queued}}"
+  },
   "actions": {
     "status": "Estado",
     "priority": "Prioridad",

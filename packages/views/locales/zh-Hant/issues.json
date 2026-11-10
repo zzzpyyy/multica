@@ -932,6 +932,20 @@
     "group_unstaged": "未分階段",
     "children_label": "{{identifier}} 的子任務"
   },
+  "instances": {
+    "section": "實例",
+    "index": "實例 {{index}}/{{total}}",
+    "priority": "優先",
+    "queue_position": "第 {{position}} 位",
+    "reason": {
+      "role_full": "角色名額已滿（{{running}}/{{limit}}）",
+      "runtime_full": "執行環境已滿",
+      "runtime_offline": "執行環境離線",
+      "waiting_dispatch": "等待領取"
+    },
+    "session": "工作階段 {{id}}",
+    "card_counts": "{{agent}} 執行 {{running}} · 排隊 {{queued}}"
+  },
   "actions": {
     "rename_issue": "重新命名任務",
     "status": "狀態",

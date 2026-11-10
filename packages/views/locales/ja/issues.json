@@ -932,6 +932,20 @@
     "group_unstaged": "ステージなし",
     "children_label": "{{identifier}} のサブタスク"
   },
+  "instances": {
+    "section": "インスタンス",
+    "index": "インスタンス {{index}}/{{total}}",
+    "priority": "優先",
+    "queue_position": "順番待ち {{position}} 番目",
+    "reason": {
+      "role_full": "ロールの枠が上限です（{{running}}/{{limit}}）",
+      "runtime_full": "ランタイムが上限です",
+      "runtime_offline": "ランタイムがオフラインです",
+      "waiting_dispatch": "取得待ち"
+    },
+    "session": "セッション {{id}}",
+    "card_counts": "{{agent}} 実行中 {{running}} · 待機中 {{queued}}"
+  },
   "actions": {
     "rename_issue": "タスク名を変更",
     "status": "ステータス",

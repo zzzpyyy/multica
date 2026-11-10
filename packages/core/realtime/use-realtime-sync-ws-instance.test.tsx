@@ -485,6 +485,34 @@ describe("useRealtimeSync — comment folded into a queued run", () => {
   });
 });
 
+describe("useRealtimeSync — role instances", () => {
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  // Queue position and reason move when another issue's task is claimed or a
+  // runtime changes, so every issue's instances refetch, not just the event's.
+  it.each([
+    { type: "task:dispatch", payload: { task_id: "t", agent_id: "a", issue_id: "issue-other" } },
+    { type: "task:completed", payload: { task_id: "t", agent_id: "a", issue_id: "issue-other" } },
+    { type: "daemon:register", payload: {} },
+  ])("invalidates every issue's instances on $type", async (event) => {
+    vi.useFakeTimers();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+    const ws = createMockWs();
+    renderHook(() => useRealtimeSync(ws, createStores()), { wrapper: createWrapper(qc) });
+    const onAny = vi.mocked(ws.onAny).mock.calls[0]![0];
+    const keys = [issueKeys.instances("ws-1", "issue-1"), issueKeys.instances("ws-1", "issue-2")];
+    for (const key of keys) qc.setQueryData(key, { batches: [] });
+
+    onAny(event as never);
+    await vi.advanceTimersByTimeAsync(100);
+
+    for (const key of keys) expect(qc.getQueryState(key)?.isInvalidated).toBe(true);
+  });
+});
+
 describe("useRealtimeSync — live usage", () => {
   afterEach(() => {
     cleanup();

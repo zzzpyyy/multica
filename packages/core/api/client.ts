@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import type { ZodType } from "zod";
 import { AgentRuntimeSchema, EMPTY_RUNTIME } from "../runtimes/schema";
 import type { IssueWakeup, IssueWakeupInput, IssueWakeupSummaryRow, PausedWakeup, SystemWakeup, WakeupRun, WorkspaceSystemWakeup } from "../types/issue-wakeup";
@@ -5,6 +6,7 @@ import type { WorkspaceWakeupPage, WorkspaceWakeupFilters } from "../types/issue
 import { WorkspaceWakeupPageSchema, IssueWakeupSchema, IssueWakeupSummaryRowSchema, PausedWakeupSchema, SystemWakeupSchema, WakeupRunSchema, WorkspaceSystemWakeupSchema } from "./schemas";
 import type { ArchivedInboxFilters } from "../inbox/filter-store";
 import type { ArchivedInboxPage, ArchivedInboxFacets } from "../types/inbox";
+import type { ListInstancesResponse } from "../types/instance";
 import { parseQoderConnection, parseQoderCatalog, type QoderInput } from "../runtimes/qoder-schema";
 import { configStore } from "../config";
 import type {
@@ -281,6 +283,7 @@ import {
   ChildIssuesResponseSchema,
   IssueDuplicatesResponseSchema,
   ChildIssueProgressResponseSchema,
+  ListInstancesResponseSchema,
   CommentsListSchema,
   CommentTriggerPreviewSchema,
   IssueTriggerPreviewSchema,
@@ -1660,6 +1663,14 @@ export class ApiClient {
       { progress: [] },
       { endpoint: "GET /api/issues/child-progress" },
     );
+  }
+
+  /** Role instances on an issue, newest batch first (fork, PRD D). */
+  async listIssueInstances(id: string): Promise<ListInstancesResponse> {
+    const raw = await this.fetch<unknown>(`/api/issues/${id}/instances`);
+    return parseWithFallback(raw, ListInstancesResponseSchema, { batches: [] }, {
+      endpoint: "GET /api/issues/:id/instances",
+    });
   }
 
   async getIssueLimitUsage(): Promise<IssueLimitUsage | null> {

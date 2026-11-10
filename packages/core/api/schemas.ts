@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { z } from "zod";
 import { normalizeIssueStatusCategory } from "../issues/config/status";
 import type {
@@ -1824,6 +1825,51 @@ export const ChildIssueProgressResponseSchema = z.object({
           parent_issue_id: z.string(),
           total: z.number(),
           done: z.number(),
+        })
+        .loose(),
+    )
+    .default([]),
+}).loose();
+
+// Role instances (fork, PRD D). Status and reason stay open strings so a
+// newer server's value still parses; the UI falls back for unknown ones.
+const TaskInstanceSchema = z.object({
+  index: z.number(),
+  split: z.string(),
+  status: z.string(),
+  task_id: z.string(),
+  task_ids: z.array(z.string()).default([]),
+  session_id: z.string().nullable().default(null),
+  work_dir: z.string().nullable().default(null),
+  branch_name: z.string().nullable().default(null),
+  started_at: z.string().nullable().default(null),
+  completed_at: z.string().nullable().default(null),
+  queue: z
+    .object({
+      position: z.number(),
+      reason: z.string(),
+      running: z.number().nullable().default(null),
+      limit: z.number().nullable().default(null),
+    })
+    .loose()
+    .nullable()
+    .default(null),
+}).loose();
+
+export const ListInstancesResponseSchema = z.object({
+  batches: z
+    .array(
+      z
+        .object({
+          id: z.string(),
+          issue_id: z.string(),
+          agent: z.object({ id: z.string(), name: z.string() }).loose(),
+          total: z.number(),
+          priority: z.boolean().default(false),
+          requested_by: z.object({ type: z.string(), id: z.string(), name: z.string() }).loose(),
+          created_at: z.string(),
+          settled_at: z.string().nullable().default(null),
+          instances: z.array(TaskInstanceSchema).default([]),
         })
         .loose(),
     )

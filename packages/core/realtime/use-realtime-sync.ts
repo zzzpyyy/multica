@@ -949,6 +949,8 @@ export function useRealtimeSync(
           // for every agent that hosts on this runtime, which shifts the
           // working/idle/offline pill on the squad page.
           invalidateSquadMemberStatusQueries(qc, wsId);
+          // Fork (PRD D9): runtime offline / limit changes move queue reasons.
+          qc.invalidateQueries({ queryKey: issueKeys.instancesAll(wsId) });
         }
       },
       autopilot: () => {
@@ -1029,6 +1031,9 @@ export function useRealtimeSync(
         // open composer's chips (e.g. an agent finishing its run becomes
         // triggerable again mid-typing).
         qc.invalidateQueries({ queryKey: issueKeys.commentTriggerPreviewAll() });
+        // Fork (PRD D5, D6): every issue's instances, not just the event's —
+        // a claim on another issue shifts queue positions here too.
+        qc.invalidateQueries({ queryKey: issueKeys.instancesAll(wsId) });
         // Issue-trigger previews (assign/status/create/batch) are deliberately
         // NOT invalidated here. Unlike comment triggers, the assign source
         // (create / assignee change) cancels existing tasks before enqueuing, so

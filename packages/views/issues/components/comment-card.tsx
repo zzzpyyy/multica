@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { Fragment, memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -58,6 +59,7 @@ import { RevisionConflictCompare } from "./revision-conflict-compare";
 import { InlineCommentRun, PlacedInlineCommentRun, useInlineCommentRunState, type InlineCommentRunState } from "./inline-comment-run";
 import { EMPTY_COMMENT_RUNS, isRunFailureNotice, orderThreadWithRuns, type CommentRun, type ThreadRunSlot } from "./comment-runs";
 import { descriptionPreview } from "./description-preview";
+import { InstanceLabel } from "./instances-section";
 import { useCommentAnnotations } from "./use-comment-annotations";
 import { useAttachmentVersions } from "./deliverables/attachment-versions";
 import { VersionBadge } from "./deliverables/version-badge";
@@ -728,6 +730,7 @@ function CommentRow({
         {entry.actor_type === "agent" && entry.source_task_id && (
           <WakeupSourceChip issueId={issueId} taskId={entry.source_task_id} />
         )}
+        {entry.source_task_id && <InstanceLabel issueId={issueId} taskId={entry.source_task_id} />}
 
         {isResolution && (
           <span className="text-caption font-medium text-success">
@@ -1245,6 +1248,7 @@ function CommentCardImpl({
                   {entry.actor_type === "agent" && entry.source_task_id && (
                     <WakeupSourceChip issueId={issueId} taskId={entry.source_task_id} />
                   )}
+                  {entry.source_task_id && <InstanceLabel issueId={issueId} taskId={entry.source_task_id} />}
                 </>
               )}
 

@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import {
   infiniteQueryOptions,
   keepPreviousData,
@@ -159,6 +160,13 @@ export const issueKeys = {
     [...issueKeys.childrenByParentsAll(wsId), parentIds] as const,
   childProgress: (wsId: string) =>
     [...issueKeys.all(wsId), "child-progress"] as const,
+  /** Prefix for every issue's role-instance query (fork, PRD D). Any task:*
+   *  or daemon:register event invalidates all of them: queue position and
+   *  reason move with other issues' tasks and runtime state. */
+  instancesAll: (wsId: string) =>
+    [...issueKeys.all(wsId), "instances"] as const,
+  instances: (wsId: string, id: string) =>
+    [...issueKeys.instancesAll(wsId), id] as const,
   /** Prefix-match keys for invalidating the per-issue caches below across
    *  all issues. These keys carry no wsId, so `issueKeys.all(wsId)` does NOT
    *  cover them — WS reconnect recovery must invalidate these `*All`
@@ -598,6 +606,15 @@ export function childIssuesOptions(wsId: string, id: string) {
     // staleTime would otherwise reuse an incomplete children snapshot when
     // the parent is opened again, with no later event guaranteed to heal it.
     refetchOnMount: "always",
+  });
+}
+
+/** Role instances on one issue (fork, PRD D). Shared by the detail section
+ *  and every comment's "instance i/k" label, so one request per issue. */
+export function issueInstancesOptions(wsId: string, id: string) {
+  return queryOptions({
+    queryKey: issueKeys.instances(wsId, id),
+    queryFn: () => api.listIssueInstances(id),
   });
 }
 
