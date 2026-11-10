@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import {
@@ -17,15 +18,10 @@ describe("normalizeCommandURL", () => {
 });
 
 describe("daemonCommands", () => {
-  it("only returns Cloud commands for a confirmed Cloud deployment", () => {
-    const result = daemonCommands({ status: "ready", target: "cloud" });
-    expect(result.status).toBe("ready");
-    if (result.status !== "ready") {
-      throw new Error("expected confirmed Cloud commands");
-    }
-    expect(result.setupCmd).toBe("multica setup");
-    expect(result.tokenCmd).toContain("server_url https://api.multica.ai");
-    expect(result.tokenCmd).toContain("app_url https://multica.ai");
+  it("offers no commands for a Cloud target, which the fork does not have", () => {
+    expect(daemonCommands({ status: "ready", target: "cloud" })).toEqual({
+      status: "unknown",
+    });
   });
 
   it("returns self-host commands with the configured URLs", () => {

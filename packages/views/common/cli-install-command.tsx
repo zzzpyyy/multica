@@ -1,6 +1,8 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import type { ReactNode } from "react";
+import { FORK_REPO } from "@multica/core/fork";
 import {
   Tabs,
   TabsContent,
@@ -19,9 +21,9 @@ import {
  */
 export const CLI_INSTALL_COMMANDS = {
   macosLinux:
-    "curl -fsSL https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.sh | bash",
+    `curl -fsSL https://raw.githubusercontent.com/${FORK_REPO}/main/scripts/install.sh | bash`,
   windows:
-    "irm https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.ps1 | iex",
+    `irm https://raw.githubusercontent.com/${FORK_REPO}/main/scripts/install.ps1 | iex`,
 } as const;
 
 export type CliInstallPlatform = keyof typeof CLI_INSTALL_COMMANDS;

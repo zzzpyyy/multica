@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Loader2,
@@ -9,11 +10,11 @@ import {
 } from "@multica/ui/icons";
 import { Button } from "@multica/ui/components/ui/button";
 import { api } from "@multica/core/api";
+import { FORK_REPO } from "@multica/core/fork";
 import type { RuntimeUpdateStatus } from "@multica/core/types";
 import { useT } from "../../i18n";
 
-const GITHUB_RELEASES_URL =
-  "https://api.github.com/repos/multica-ai/multica/releases/latest";
+const GITHUB_RELEASES_URL = `https://api.github.com/repos/${FORK_REPO}/releases/latest`;
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 let cachedLatestVersion: string | null = null;

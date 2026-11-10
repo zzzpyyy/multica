@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { api } from "@multica/core/api";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
@@ -114,7 +115,11 @@ describe("StepPlatformFork", () => {
   });
 
   beforeEach(() => {
-    configStore.getState().setDaemonConfig({ daemonSetupTarget: "cloud" });
+    configStore.getState().setDaemonConfig({
+      daemonSetupTarget: "self_host",
+      daemonServerUrl: "https://api.example.com",
+      daemonAppUrl: "https://app.example.com",
+    });
     resetPicker();
     vi.restoreAllMocks();
   });

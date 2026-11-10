@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -25,7 +26,7 @@ vi.mock("../../i18n", () => ({
 }));
 
 const WINDOWS_CMD =
-  "irm https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.ps1 | iex";
+  "irm https://raw.githubusercontent.com/zzzpyyy/multica/main/scripts/install.ps1 | iex";
 
 describe("CliSection", () => {
   // The switch itself is covered in @multica/views; this checks the landing

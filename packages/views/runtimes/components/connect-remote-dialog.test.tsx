@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render, screen, waitFor } from "@testing-library/react";
@@ -70,7 +71,15 @@ const wsEventState = vi.hoisted(() => ({
 }));
 
 const WINDOWS_CMD =
-  "irm https://raw.githubusercontent.com/multica-ai/multica/main/scripts/install.ps1 | iex";
+  "irm https://raw.githubusercontent.com/zzzpyyy/multica/main/scripts/install.ps1 | iex";
+// The fork has no hosted cloud, so a self-hosted server is the default case.
+const SELF_HOST = {
+  daemonSetupTarget: "self_host" as const,
+  daemonServerUrl: "https://api.example.com",
+  daemonAppUrl: "https://app.example.com",
+};
+const SELF_HOST_CMD =
+  "multica setup self-host --server-url https://api.example.com --app-url https://app.example.com";
 
 vi.mock("@multica/core/realtime", () => ({
   useWSEvent: (_event: string, handler: (payload: unknown) => void) => {
@@ -133,7 +142,7 @@ function renderDialog(config?: {
   daemonSetupTarget?: DaemonSetupTarget;
 }, status: DaemonConfigStatus = "ready", qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   resetConfigStore();
-  configStore.getState().setDaemonConfig(config ?? { daemonSetupTarget: "cloud" });
+  configStore.getState().setDaemonConfig(config ?? SELF_HOST);
   configStore.getState().setDaemonConfigStatus(status);
   const dialog = () => (
     <QueryClientProvider client={qc}>
@@ -163,19 +172,6 @@ describe("ConnectRemoteDialog", () => {
     wsEventState.reconnect = null;
     wsEventState.handler = null;
     clipboard.copyText.mockReset().mockResolvedValue(true);
-  });
-
-  it("uses cloud setup commands by default", () => {
-    const { baseElement } = renderDialog();
-
-    expect(baseElement).toHaveTextContent("multica setup");
-    expect(baseElement).not.toHaveTextContent("multica setup self-host");
-    expect(baseElement).toHaveTextContent(
-      "multica config set server_url https://api.multica.ai",
-    );
-    expect(baseElement).toHaveTextContent(
-      "multica config set app_url https://multica.ai",
-    );
   });
 
   it("uses self-host daemon URLs from runtime config", () => {
@@ -224,6 +220,7 @@ describe("ConnectRemoteDialog", () => {
 
   it.each([
     { daemonSetupTarget: "unknown" as const },
+    { daemonSetupTarget: "cloud" as const },
     { daemonSetupTarget: "self_host" as const, daemonServerUrl: "https://api.example.com" },
   ])("withholds both command paths for unresolved config %j", (config) => {
     const { baseElement } = renderDialog(config);
@@ -284,7 +281,7 @@ describe("ConnectRemoteDialog", () => {
     const { qc } = await renderListeningDialog();
     await refreshRuntimes(qc, payload);
     expect(screen.queryByText("Machine connected")).not.toBeInTheDocument();
-    expect(screen.getByText("multica setup")).toBeInTheDocument();
+    expect(screen.getByText(SELF_HOST_CMD)).toBeInTheDocument();
   });
 
   it("does not report success from an offline notification alone", async () => {
@@ -474,7 +471,7 @@ describe("ConnectRemoteDialog", () => {
     await waitFor(() => expect(view.qc.getQueryData(runtimeKeys.listMine(nextWorkspace))).toEqual([]));
     await refreshRuntimes(view.qc, { runtime_profile_id: "existing-profile" });
     expect(screen.queryByText("Machine connected")).not.toBeInTheDocument();
-    expect(screen.getByText("multica setup")).toBeInTheDocument();
+    expect(screen.getByText(SELF_HOST_CMD)).toBeInTheDocument();
   });
 
 
