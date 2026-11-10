@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package handler
 
 import (
@@ -204,6 +206,9 @@ func (h *Handler) CreateIssueWakeup(w http.ResponseWriter, r *http.Request) {
 	actorType, actorID := h.resolveActor(r, requestUserID(r), uuidToString(issue.WorkspaceID))
 	if in.AgentID == "" && actorType == "agent" {
 		in.AgentID = actorID
+	}
+	if h.refuseSuperAgentByID(w, r.Context(), in.AgentID) { // Fork (B)
+		return
 	}
 	originator := h.invokeOriginatorFromRequest(r, actorType, actorID)
 	if originator == "" {

@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package handler
 
 import (
@@ -814,6 +816,9 @@ func (h *Handler) AddSquadMember(w http.ResponseWriter, r *http.Request) {
 		})
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "agent not found in this workspace")
+			return
+		}
+		if refuseSuperAgentAssignee(w, agent) { // Fork (B)
 			return
 		}
 		// A non-admin creator may only add agents they can @-trigger (public

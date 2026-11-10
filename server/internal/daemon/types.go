@@ -201,6 +201,10 @@ type Task struct {
 	AuthToken string `json:"auth_token,omitempty"`
 	// Fork (D): set when this run is one instance of an add-instances batch.
 	Instance *TaskInstance `json:"instance,omitempty"`
+	// Fork (B): the super-agent's tasks. NoTools launches with no built-in
+	// tools and no MCP servers; ServerPrompt, when set, is the whole prompt.
+	NoTools      bool   `json:"no_tools,omitempty"`
+	ServerPrompt string `json:"server_prompt,omitempty"`
 }
 
 // ChatAttachmentMeta is the structured attachment metadata the daemon

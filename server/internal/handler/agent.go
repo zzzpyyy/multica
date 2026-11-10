@@ -633,6 +633,11 @@ type AgentTaskResponse struct {
 	AuthToken string `json:"auth_token,omitempty"`
 	// Fork (D): set for an instance row; see InstanceClaim.
 	Instance *InstanceClaim `json:"instance,omitempty"`
+	// Fork (B): super-agent tasks. NoTools makes the fork's daemon launch with
+	// no tools and no MCP servers; ServerPrompt is the whole prompt of an
+	// answer-on-your-behalf turn.
+	NoTools      bool   `json:"no_tools,omitempty"`
+	ServerPrompt string `json:"server_prompt,omitempty"`
 }
 
 // TaskAttribution is the wire shape of a run's accountable-human provenance

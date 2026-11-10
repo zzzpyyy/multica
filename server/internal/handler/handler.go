@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package handler
 
 import (
@@ -606,6 +608,10 @@ func writeMeasuredJSON(w http.ResponseWriter, status int, v any) (int, error) {
 }
 
 func writeError(w http.ResponseWriter, status int, msg string) {
+	if msg == superAgentNotAssignableMsg { // Fork (B): every assignee check reports through here
+		writeErrorCode(w, status, "super_agent_not_assignable", msg)
+		return
+	}
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 

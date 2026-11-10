@@ -370,8 +370,11 @@ var concurrentIndexCleanups = map[string]string{
 	"484_issue_triage_state_index":                              "idx_issue_triage_state",
 	"537_issue_duplicate_of_index":                              "idx_issue_duplicate_of",
 	// Fork (zzzpyyy/multica) migrations start at 9001.
-	"9002_fork_task_batch_index":      "idx_agent_task_queue_batch",
-	"9003_fork_pending_thread_unique": "idx_one_pending_task_per_issue_agent_thread_fork",
+	"9002_fork_task_batch_index":                  "idx_agent_task_queue_batch",
+	"9003_fork_pending_thread_unique":             "idx_one_pending_task_per_issue_agent_thread_fork",
+	"9006_fork_super_agent_action_message_unique": "idx_super_agent_action_message",
+	"9007_fork_super_agent_push_dedupe_unique":    "idx_super_agent_push_dedupe",
+	"9008_fork_super_agent_question_unique":       "idx_super_agent_question_comment",
 }
 
 // concurrentDownIndexCleanups covers every migration whose down direction

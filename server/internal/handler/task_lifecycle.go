@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package handler
 
 import (
@@ -204,6 +206,9 @@ func (h *Handler) RerunTaskByUser(w http.ResponseWriter, r *http.Request) {
 	}
 	if !source.IssueID.Valid {
 		writeError(w, http.StatusBadRequest, "only issue-linked runs can be rerun with this endpoint")
+		return
+	}
+	if a, err := h.Queries.GetAgent(r.Context(), source.AgentID); err == nil && refuseSuperAgentAssignee(w, a) { // Fork (B)
 		return
 	}
 	issue, ok := h.loadIssueForUser(w, r, uuidToString(source.IssueID))

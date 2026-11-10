@@ -176,12 +176,20 @@ func (q *Queries) DeleteWorkspaceAutopilots(ctx context.Context, workspaceID pgt
 }
 
 const deleteWorkspaceChatMessages = `-- name: DeleteWorkspaceChatMessages :exec
-DELETE FROM chat_message
-WHERE chat_session_id IN (
+WITH sessions AS (
     SELECT id FROM chat_session WHERE chat_session.workspace_id = $1
+), deleted_super_actions AS (
+    DELETE FROM super_agent_action WHERE chat_session_id IN (SELECT id FROM sessions)
+), deleted_super_pushes AS (
+    DELETE FROM super_agent_push WHERE chat_session_id IN (SELECT id FROM sessions)
+), deleted_super_questions AS (
+    DELETE FROM super_agent_question WHERE chat_session_id IN (SELECT id FROM sessions)
 )
+DELETE FROM chat_message
+WHERE chat_session_id IN (SELECT id FROM sessions)
 `
 
+// Fork (B): super-agent rows have no FK; they go with their chat session.
 func (q *Queries) DeleteWorkspaceChatMessages(ctx context.Context, workspaceID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteWorkspaceChatMessages, workspaceID)
 	return err

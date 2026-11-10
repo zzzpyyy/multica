@@ -177,8 +177,14 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 | `server/pkg/db/queries/issue.sql`、`workspace_delete.sql` | 删任务、删工作区时删掉实例批次（新表没有外键） | D |
 | `server/internal/service/task.go` | 领取后如果这个角色还有排队行和名额，再唤醒一次 daemon；实例的重试不看普通运行的待处理名额；认得新的唯一索引名 | D1、D2 |
 | `server/cmd/migrate/main.go` | 登记 9002–9004 的并发索引清理 | D |
-| `server/cmd/server/router.go` | 注册 `POST`/`GET /api/issues/{id}/instances` | D1、D5、D9、D11、D14、D15 |
+| `server/cmd/server/router.go` | 注册 `POST`/`GET /api/issues/{id}/instances`、`POST /api/agents/super-agent` | D1、D5、D9、D11、D14、D15、B1 |
 | `server/cmd/server/main.go` | 注册实例批次的结算监听和 30 秒兜底扫描 | D3、D10、D14 |
+| `server/internal/handler/chat.go` | super-agent 的会话不能新建第二段、归档、删除（409 `super_agent_session_locked`） | B1 |
+| `server/internal/handler/handler.go`、`issue.go`、`autopilot.go`、`squad.go`、`issue_wakeup.go`、`task_lifecycle.go` | 指派、自动化负责人、加小队成员、建唤醒规则、重跑碰到 super-agent 返回 400 `super_agent_not_assignable` | G4、G5 |
+| `server/internal/handler/comment.go`（`computeCommentAgentTriggers`） | 评论路由汇合处去掉 super-agent：@ 它、回复它的评论都照常发出，但不起运行 | G4、G5 |
+| `server/internal/handler/daemon.go`（super-agent） | 领取 super-agent 的任务要求 `multica-fork-v1`；清空工具相关字段、设 `no_tools`、用内置说明，对话轮次前面拼上服务端上下文 | B1、B12、B19、G3 |
+| `server/internal/service/task.go`（super-agent） | 触发器拒绝的入队当作"没有入队"；委派失败不交给 super-agent 接手；super-agent 的运行不补兜底评论 | G4、G5 |
+| `server/internal/daemon/daemon.go`、`prompt.go`、`types.go`（super-agent） | `no_tools` 的任务不合并本机 `~/.claude.json`、Remote MCP 和插件钩子，丢掉 `custom_args`，加 `--tools ""`；`server_prompt` 不为空时直接作为提示词 | B12、G3 |
 | `server/internal/handler/agent.go`、`daemon.go` | 领取响应加 `instance` 字段；没声明 `multica-fork-v1` 的 daemon 领到实例行时，这次领取失败（`fork_daemon_required`） | D2、D3 |
 | `server/internal/handler/issue.go`、`issue_move.go` | 实例运行改状态、负责人、父任务时返回 403 `instance_run_readonly`（单个、批量、拖动三处） | D4 |
 | `server/internal/handler/comment.go` | 实例发的评论不走隐式兜底，不唤醒负责人或 leader | D3 |

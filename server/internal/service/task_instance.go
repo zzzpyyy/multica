@@ -27,10 +27,6 @@ import (
 // else for the agent (D7, D16).
 const InstancePriorityBoost = 10
 
-// SuperAgentSystemKey marks the built-in super-agent (agent.system_key). It
-// never runs instances (rule 7).
-const SuperAgentSystemKey = "super"
-
 // InstanceError is a rejected add-instances request. Status and Code are the
 // HTTP contract (plan 3.1); the CLI and plan cards show Msg.
 type InstanceError struct {
@@ -62,7 +58,7 @@ type InstanceRequest struct {
 // CheckInstanceAdmission rejects targets whose instances could not run in
 // isolation (P2) or must not run at all (super-agent).
 func (s *TaskService) CheckInstanceAdmission(ctx context.Context, issue db.Issue, agent db.Agent) error {
-	if agent.SystemKey.Valid && agent.SystemKey.String == SuperAgentSystemKey {
+	if IsSuperAgent(agent) {
 		return instanceErr(http.StatusBadRequest, "super_agent_not_assignable", "super-agent cannot run instances")
 	}
 	if agent.ArchivedAt.Valid {
@@ -110,7 +106,7 @@ func (s *TaskService) CheckInstanceAdmission(ctx context.Context, issue db.Issue
 // CreateInstances validates and enqueues one batch (plan 2.3, 3.1).
 func (s *TaskService) CreateInstances(ctx context.Context, req InstanceRequest) (db.AgentTaskBatch, []db.AgentTaskQueue, error) {
 	agent, issue := req.Agent, req.Issue
-	if agent.SystemKey.Valid && agent.SystemKey.String == SuperAgentSystemKey {
+	if IsSuperAgent(agent) {
 		return db.AgentTaskBatch{}, nil, instanceErr(http.StatusBadRequest, "super_agent_not_assignable", "super-agent cannot run instances")
 	}
 	n := int(agent.MaxConcurrentTasks)

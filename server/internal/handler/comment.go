@@ -2665,7 +2665,22 @@ func (h *Handler) enqueueSingleCommentTrigger(ctx context.Context, issue db.Issu
 // @squad mention (MUL-4525 §2). Targets come only from the explicit-mention path
 // — the implicit routing fallbacks (assignee, thread parent, conversation) were
 // never named by the user, so a no-route there is not a silent no-op.
+// computeCommentAgentTriggers is where every comment route meets (mentions,
+// replies, thread owners, squad leader fallback). Fork (B): it drops the
+// super-agent from the result, so a comment that names it or answers it is
+// posted but starts no run (plan 2.4).
 func (h *Handler) computeCommentAgentTriggers(ctx context.Context, issue db.Issue, content string, parentComment *db.Comment, actorType, actorID string, opts commentTriggerComputeOptions) ([]commentAgentTrigger, []commentMentionTarget) {
+	triggers, targets := h.computeCommentAgentTriggersUpstream(ctx, issue, content, parentComment, actorType, actorID, opts)
+	kept := triggers[:0]
+	for _, t := range triggers {
+		if !service.IsSuperAgent(t.Agent) {
+			kept = append(kept, t)
+		}
+	}
+	return kept, targets
+}
+
+func (h *Handler) computeCommentAgentTriggersUpstream(ctx context.Context, issue db.Issue, content string, parentComment *db.Comment, actorType, actorID string, opts commentTriggerComputeOptions) ([]commentAgentTrigger, []commentMentionTarget) {
 	// A persisted comment determines its thread; previews use the parent.
 	// A new top-level preview has no thread yet and cannot merge with a queue.
 	opts.ThreadCommentID = opts.ExcludeTriggerCommentID

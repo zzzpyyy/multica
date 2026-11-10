@@ -4289,6 +4289,9 @@ func (h *Handler) validateAssigneePair(ctx context.Context, r *http.Request, wor
 		if agent.ArchivedAt.Valid {
 			return http.StatusBadRequest, "cannot assign to archived agent"
 		}
+		if service.IsSuperAgent(agent) { // Fork (B)
+			return http.StatusBadRequest, superAgentNotAssignableMsg
+		}
 		actorType, actorID := h.resolveActor(r, requestUserID(r), workspaceID)
 		effectiveInvoker := h.invokeOriginatorFromRequest(r, actorType, actorID)
 		if !h.canInvokeAgent(ctx, agent, actorType, actorID, effectiveInvoker, workspaceID) {
@@ -4317,6 +4320,9 @@ func (h *Handler) validateAssigneePair(ctx context.Context, r *http.Request, wor
 		leader, err := h.Queries.GetAgent(ctx, squad.LeaderID)
 		if err != nil || leader.ArchivedAt.Valid {
 			return http.StatusBadRequest, "squad leader is archived; cannot assign to this squad"
+		}
+		if service.IsSuperAgent(leader) { // Fork (B)
+			return http.StatusBadRequest, superAgentNotAssignableMsg
 		}
 		actorType, actorID := h.resolveActor(r, requestUserID(r), workspaceID)
 		effectiveInvoker := h.invokeOriginatorFromRequest(r, actorType, actorID)

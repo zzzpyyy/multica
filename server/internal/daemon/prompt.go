@@ -331,6 +331,9 @@ func buildWorktreeReplayConflictBlock(files []string) string {
 // post with `--content-file`) because the shell-layer corruption it guards
 // against is not specific to any one provider or host (MUL-2904, #4182).
 func BuildPrompt(task Task, provider string, options ...PromptOption) string {
+	if task.ServerPrompt != "" {
+		return task.ServerPrompt // Fork (B): the server built the whole prompt.
+	}
 	var opts promptOpts
 	for _, apply := range options {
 		apply(&opts)

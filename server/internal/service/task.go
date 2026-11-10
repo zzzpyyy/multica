@@ -1389,7 +1389,7 @@ func (s *TaskService) enqueueIssueTaskWithCommentPlan(ctx context.Context, issue
 		// sentinel the caller maps to a coalesced outcome / 409 rather than a
 		// 500 that leaks the raw constraint name (#5914). Mirrors the mention
 		// path in enqueueMentionTaskWithCommentPlan.
-		if isDuplicatePendingTaskErr(err) {
+		if isDuplicatePendingTaskErr(err) || IsSuperAgentRunRefused(err) {
 			slog.Debug("task enqueue coalesced: pending task already exists", "issue_id", util.UUIDToString(issue.ID), "agent_id", util.UUIDToString(issue.AssigneeID))
 			return db.AgentTaskQueue{}, ErrDuplicatePendingTask
 		}
@@ -1532,7 +1532,7 @@ func (s *TaskService) enqueueMentionTaskWithCommentPlan(ctx context.Context, iss
 		// already covers this target — so log it at debug and return a typed
 		// sentinel the caller maps to a coalesced outcome / 409 rather than a
 		// 500 that leaks the raw constraint name (#5914).
-		if isDuplicatePendingTaskErr(err) {
+		if isDuplicatePendingTaskErr(err) || IsSuperAgentRunRefused(err) {
 			slog.Debug("mention task enqueue coalesced: pending task already exists", "issue_id", util.UUIDToString(issue.ID), "agent_id", util.UUIDToString(agentID))
 			return db.AgentTaskQueue{}, ErrDuplicatePendingTask
 		}
@@ -4794,7 +4794,8 @@ func (s *TaskService) CompleteTaskWithTransition(ctx context.Context, taskID pgt
 		})
 		// A scheduled wakeup check that found nothing new ends with a check-in
 		// instead of a comment (see IssueWakeupService.CheckIn).
-		if !suppressNoActionComment && !agentCommented && !HasWakeupCheckin(task) {
+		// Fork (B): the super-agent's output is an action, never a comment.
+		if !suppressNoActionComment && !agentCommented && !HasWakeupCheckin(task) && !s.isSuperAgentTask(ctx, task) {
 			var payload protocol.TaskCompletedPayload
 			if err := json.Unmarshal(result, &payload); err == nil {
 				if payload.Output != "" {
@@ -6574,6 +6575,11 @@ func loadDelegatedFailureRecoveryTarget(ctx context.Context, q *db.Queries, fail
 		return nil, fmt.Errorf("load source agent: %w", err)
 	}
 	if agent.ArchivedAt.Valid || !agent.RuntimeID.Valid || agent.WorkspaceID != issue.WorkspaceID {
+		return nil, nil
+	}
+	// Fork (B): the super-agent never takes over coordination; the failure is
+	// still pushed to the user's conversation.
+	if IsSuperAgent(agent) {
 		return nil, nil
 	}
 	return &delegatedFailureRecoveryTarget{failed: failed, source: source, issue: issue, agent: agent}, nil

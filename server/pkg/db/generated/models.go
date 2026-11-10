@@ -1550,6 +1550,34 @@ type SquadMember struct {
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }
 
+type SuperAgentAction struct {
+	ID            pgtype.UUID        `json:"id"`
+	ChatSessionID pgtype.UUID        `json:"chat_session_id"`
+	ChatMessageID pgtype.UUID        `json:"chat_message_id"`
+	Kind          string             `json:"kind"`
+	Payload       []byte             `json:"payload"`
+	Status        string             `json:"status"`
+	Result        []byte             `json:"result"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type SuperAgentPush struct {
+	ID            pgtype.UUID        `json:"id"`
+	ChatSessionID pgtype.UUID        `json:"chat_session_id"`
+	ChatMessageID pgtype.UUID        `json:"chat_message_id"`
+	DedupeKey     string             `json:"dedupe_key"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type SuperAgentQuestion struct {
+	ID            pgtype.UUID        `json:"id"`
+	ChatSessionID pgtype.UUID        `json:"chat_session_id"`
+	CommentID     pgtype.UUID        `json:"comment_id"`
+	Status        string             `json:"status"`
+	TaskID        pgtype.UUID        `json:"task_id"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
 type SysCronExecution struct {
 	ID           pgtype.UUID        `json:"id"`
 	JobName      string             `json:"job_name"`

@@ -528,10 +528,18 @@ SET state = CASE
 WHERE channel_media_pending_object.workspace_id = $1;
 
 -- name: DeleteWorkspaceChatMessages :exec
-DELETE FROM chat_message
-WHERE chat_session_id IN (
+-- Fork (B): super-agent rows have no FK; they go with their chat session.
+WITH sessions AS (
     SELECT id FROM chat_session WHERE chat_session.workspace_id = $1
-);
+), deleted_super_actions AS (
+    DELETE FROM super_agent_action WHERE chat_session_id IN (SELECT id FROM sessions)
+), deleted_super_pushes AS (
+    DELETE FROM super_agent_push WHERE chat_session_id IN (SELECT id FROM sessions)
+), deleted_super_questions AS (
+    DELETE FROM super_agent_question WHERE chat_session_id IN (SELECT id FROM sessions)
+)
+DELETE FROM chat_message
+WHERE chat_session_id IN (SELECT id FROM sessions);
 
 -- name: DeleteWorkspaceCommunicationRoots :exec
 WITH

@@ -30,6 +30,9 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"agent_skill":                        workspaceDelete,
 	"agent_task_queue":                   workspaceDelete,
 	"agent_task_batch":                   workspaceDelete, // Fork (D): DeleteWorkspaceIssueRoots.
+	"super_agent_action":                 workspaceDelete, // Fork (B): DeleteWorkspaceChatMessages.
+	"super_agent_push":                   workspaceDelete,
+	"super_agent_question":               workspaceDelete,
 	"agent_to_label":                     workspaceDelete,
 	"attachment":                         workspaceDelete,
 	"autopilot":                          workspaceDelete,

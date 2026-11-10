@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package handler
 
 import (
@@ -1817,6 +1819,10 @@ func (h *Handler) validateAutopilotAssigneeForSave(
 		}
 		if agent.ArchivedAt.Valid {
 			writeError(w, http.StatusUnprocessableEntity, "assignee agent is archived; pick a different agent")
+			return false
+		}
+		if agent.SystemKey.String == service.SuperAgentSystemKey { // Fork (B)
+			writeError(w, http.StatusBadRequest, superAgentNotAssignableMsg)
 			return false
 		}
 		if requireRuntime && !agent.RuntimeID.Valid {

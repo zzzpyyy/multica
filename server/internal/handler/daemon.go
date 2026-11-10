@@ -2853,6 +2853,9 @@ func (h *Handler) buildClaimedTaskResponse(r *http.Request, task *db.AgentTaskQu
 	if failure := h.applyInstanceClaim(r, task, &resp); failure != nil { // Fork (D)
 		return resp, nil, nil, 0, 0, failure
 	}
+	if failure := h.applySuperAgentClaim(r, task, &resp); failure != nil { // Fork (B)
+		return resp, nil, nil, 0, 0, failure
+	}
 	// Preserve PostgreSQL's microseconds: second-resolution display timestamps
 	// cannot distinguish stale claims reclaimed within the same second.
 	if task.DispatchedAt.Valid {
@@ -4239,6 +4242,10 @@ func (h *Handler) buildClaimedTaskResponse(r *http.Request, task *db.AgentTaskQu
 		resp.InitiatorEmail = originator.Email
 	}
 
+	if resp.Agent != nil && h.isSuperAgentTask(r.Context(), task) { // Fork (B): last, after every tool-bearing field
+		stripSuperAgentTools(&resp)
+		h.prefixSuperAgentContext(r.Context(), task, &resp)
+	}
 	return resp, deliveredCommentIDs, issueSnapshot, agentSkillCount, builtinSkillCount, nil
 }
 

@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package handler
 
 import (
@@ -76,6 +78,9 @@ func (h *Handler) CreateChatSession(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		writeError(w, http.StatusNotFound, "agent not found")
+		return
+	}
+	if h.superAgentSessionLocked(w, r.Context(), agent.ID) { // Fork (B): one session
 		return
 	}
 	if agent.ArchivedAt.Valid {
@@ -562,6 +567,9 @@ func (h *Handler) SetChatSessionArchived(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
+	if h.superAgentSessionLocked(w, r.Context(), session.AgentID) { // Fork (B)
+		return
+	}
 
 	tx, err := h.TxStarter.Begin(r.Context())
 	if err != nil {
@@ -690,6 +698,9 @@ func (h *Handler) DeleteChatSession(w http.ResponseWriter, r *http.Request) {
 
 	session, ok := h.loadChatSessionForUser(w, r, userID, workspaceID, sessionID)
 	if !ok {
+		return
+	}
+	if h.superAgentSessionLocked(w, r.Context(), session.AgentID) { // Fork (B)
 		return
 	}
 

@@ -8090,11 +8090,10 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 	// requires Prepare-time managed-env provenance and a daemon-owned marker
 	// before allowing reuse, so a pre-fix leader session recorded against
 	// local_directory still fails closed.
-	var agentMcpConfig json.RawMessage
 	var effectiveMcpConfig json.RawMessage
 	var cursorMcpAuthSource string
 	remoteMCPConfig, remoteMCPDiagnostics, remoteMCPBrokers, remoteMCPErr := startTaskRemoteMCPBrokers(
-		prepareCtx, ctx, task.ID, provider, task.RemoteMCPConnections,
+		prepareCtx, ctx, task.ID, provider, taskRemoteMCPConnections(task),
 		func(resolveCtx context.Context, contributionID string) (http.Header, error) {
 			return d.client.ResolveRemoteMCPCredential(resolveCtx, task.RemoteMCPDaemonToken, task.ID, contributionID)
 		},
@@ -8116,7 +8115,7 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 	// on the issue, which is the same rule that makes a failing tool call a
 	// tool error rather than a task error.
 	pluginHookConfig, pluginHookServer, pluginHookErr := startTaskPluginHookMCP(
-		ctx, task.ID, task.PluginHookTools,
+		ctx, task.ID, taskPluginHookTools(task),
 		func(callCtx context.Context, taskID, installationID, hookKey string, input json.RawMessage) (json.RawMessage, error) {
 			return d.client.InvokeAgentPluginHook(callCtx, task.RemoteMCPDaemonToken, taskID, installationID, hookKey, input)
 		},
@@ -8137,22 +8136,10 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 		}
 	}
 	if task.Agent != nil {
-		agentMcpConfig = task.Agent.McpConfig
-		effectiveMcpConfig = agentMcpConfig
-		if merged, mergeErr := mergeRuntimeAndAgentMcpConfig(provider, agentMcpConfig); mergeErr != nil {
-			taskLog.Warn("mcp_config: runtime merge failed; using agent configuration only",
-				"provider", provider,
-				"error", mergeErr,
-			)
-		} else {
-			effectiveMcpConfig = merged
-		}
-		if len(remoteMCPConfig) > 0 {
-			merged, mergeErr := mergeTaskRemoteMCPConfig(effectiveMcpConfig, remoteMCPConfig)
-			if mergeErr != nil {
-				return TaskResult{}, fmt.Errorf("merge Remote MCP broker configuration: %w", mergeErr)
-			}
-			effectiveMcpConfig = merged
+		// Fork (B): merge moved into resolveTaskMcpConfig, which enforces no_tools.
+		var mcpErr error
+		if effectiveMcpConfig, mcpErr = resolveTaskMcpConfig(task, provider, remoteMCPConfig, taskLog); mcpErr != nil {
+			return TaskResult{}, mcpErr
 		}
 		if provider == "cursor" {
 			cursorMcpAuthSource = strings.TrimSpace(task.Agent.CustomEnv[execenv.CursorMcpAuthSourceEnv])
@@ -8920,6 +8907,7 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 		// has no overlay to protect and keeps its flags untouched.
 		customArgs = hermesOverlayCustomArgs
 	}
+	extraArgs, customArgs = taskLaunchArgs(task, extraArgs, customArgs) // Fork (B): no_tools
 	thinkingLevel := ""
 	serviceTier := ""
 	if task.Agent != nil {
