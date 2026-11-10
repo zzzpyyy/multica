@@ -70,36 +70,20 @@ type GitHubRelease struct {
 }
 
 // IsReleaseVersion reports whether v looks like a tagged release version
-// (e.g. "0.1.13", "v0.1.13") rather than a dev build (e.g. an empty version
-// or a `git describe`–style "v0.2.15-235-gdaf0e935"). The auto-update poller
-// uses this to skip self-update for source builds, where downgrading to a
-// public release would clobber unreleased changes.
+// (e.g. "0.1.13", "v0.1.13", or the fork's "v0.8.1-fork.2") rather than a dev
+// build (e.g. an empty version, a `git describe`–style "v0.2.15-235-gdaf0e935"
+// or "v0.8.1-fork.1-3-gabc1234"). The auto-update poller uses this to skip
+// self-update for source builds, where downgrading to a public release would
+// clobber unreleased changes.
 func IsReleaseVersion(v string) bool {
-	s := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(v), "v"))
-	if s == "" {
-		return false
-	}
-	parts := strings.Split(s, ".")
-	if len(parts) != 3 {
-		return false
-	}
-	for _, p := range parts {
-		if p == "" {
-			return false
-		}
-		for _, r := range p {
-			if r < '0' || r > '9' {
-				return false
-			}
-		}
-	}
-	return true
+	_, ok := parseReleaseVersion(v)
+	return ok
 }
 
 // IsNewerVersion reports whether latest is strictly newer than current. Both
-// arguments may carry an optional "v" prefix; non-numeric tails are ignored
-// (a 4th component, pre-release tag, etc.). Returns false if either side
-// cannot be parsed — the caller treats that as "stay on current".
+// arguments may carry an optional "v" prefix. Versions compare as
+// (major, minor, patch, fork), where "x.y.z" has fork 0. Returns false if
+// either side cannot be parsed — the caller treats that as "stay on current".
 func IsNewerVersion(latest, current string) bool {
 	l, ok := parseReleaseVersion(latest)
 	if !ok {
@@ -109,7 +93,7 @@ func IsNewerVersion(latest, current string) bool {
 	if !ok {
 		return false
 	}
-	for i := 0; i < 3; i++ {
+	for i := range l {
 		if l[i] != c[i] {
 			return l[i] > c[i]
 		}
@@ -117,35 +101,36 @@ func IsNewerVersion(latest, current string) bool {
 	return false
 }
 
-// parseReleaseVersion extracts the three numeric components of v. Returns
-// (parts, true) on success; (_, false) when v is missing, malformed, or
-// carries any non-numeric tail (a dev-describe suffix, a 4th component, a
-// pre-release tag, etc.). The strict shape is intentional: this is the only
-// parser used by IsNewerVersion, and the autoUpdateLoop must never silently
-// downgrade a developer build to a public release just because the
-// dev-describe patch happened to look numeric after trimming.
-func parseReleaseVersion(v string) ([3]int, bool) {
+// parseReleaseVersion accepts exactly "x.y.z" or "x.y.z-fork.N" (fork,
+// zzzpyyy/multica): the fork releases as v<upstream>-fork.<n>, so without the
+// suffix no fork release would ever count as an update. Anything else — a
+// dev-describe suffix, a 4th component, another pre-release tag — fails, so
+// the autoUpdateLoop never replaces a developer build.
+func parseReleaseVersion(v string) ([4]int, bool) {
 	s := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(v), "v"))
-	if s == "" {
-		return [3]int{}, false
-	}
-	parts := strings.Split(s, ".")
+	core, fork, hasFork := strings.Cut(s, "-fork.")
+	parts := strings.Split(core, ".")
 	if len(parts) != 3 {
-		return [3]int{}, false
+		return [4]int{}, false
 	}
-	var out [3]int
+	if hasFork {
+		parts = append(parts, fork)
+	} else {
+		parts = append(parts, "0")
+	}
+	var out [4]int
 	for i, p := range parts {
 		if p == "" {
-			return [3]int{}, false
+			return [4]int{}, false
 		}
 		for _, r := range p {
 			if r < '0' || r > '9' {
-				return [3]int{}, false
+				return [4]int{}, false
 			}
 		}
 		n, err := strconv.Atoi(p)
 		if err != nil {
-			return [3]int{}, false
+			return [4]int{}, false
 		}
 		out[i] = n
 	}

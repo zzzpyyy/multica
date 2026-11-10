@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package cli
 
 import (
@@ -116,6 +118,11 @@ func TestIsReleaseVersion(t *testing.T) {
 		{"two components", "0.1", false},
 		{"four components", "0.1.2.3", false},
 		{"non-numeric", "1.0.x", false},
+		{"fork release", "v0.8.1-fork.2", true},
+		{"fork dev describe", "v0.8.1-fork.1-3-gabc1234", false},
+		{"fork dev build", "0.8.1-fork.0-dev.dd84444fb515", false},
+		{"fork without number", "v0.8.1-fork.", false},
+		{"other pre-release", "v0.8.1-rc.1", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -144,6 +151,12 @@ func TestIsNewerVersion(t *testing.T) {
 		{"current unparseable → false", "v0.1.14", "garbage", false},
 		{"empty latest", "", "v0.1.13", false},
 		{"empty current", "v0.1.14", "", false},
+		{"fork bump", "v0.8.1-fork.2", "v0.8.1-fork.1", true},
+		{"fork same", "v0.8.1-fork.2", "0.8.1-fork.2", false},
+		{"fork older", "v0.8.1-fork.1", "v0.8.1-fork.2", false},
+		{"fork on newer upstream", "v0.8.2-fork.1", "v0.8.1-fork.9", true},
+		{"fork beats its upstream base", "v0.8.1-fork.1", "v0.8.1", true},
+		{"fork dev build never updates", "v0.8.1-fork.2", "0.8.1-fork.0-dev.dd84444fb515", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

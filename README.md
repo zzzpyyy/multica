@@ -170,7 +170,7 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 | `.github/workflows/ci.yml` | 每次推送都跑 CI，加上 `fork-checks` 任务 | G7、G8 |
 | `.github/workflows/release.yml` | 只发 CLI 和 macOS 桌面端；删掉 Docker、Helm、Homebrew；tag 只认 `-fork.N`；发布前扫描安装包 | G7、M1、M5–M7 |
 | `.goreleaser.yml` | 删掉 `brews`；`prerelease: false`、`make_latest: true` | M5–M7 |
-| `server/internal/cli/update.go`、`update_source_test.go` | CLI 升级、daemon 自动升级、服务端下发的升级都查本仓库的 Releases（常量 `server/internal/cli/fork.go`） | M2、M7 |
+| `server/internal/cli/update.go`、`update_source_test.go`、`update_test.go` | CLI 升级、daemon 自动升级、服务端下发的升级都查本仓库的 Releases（常量 `server/internal/cli/fork.go`）；`x.y.z-fork.N` 算正式版本，按 (x, y, z, N) 比较新旧 | M2、M7 |
 | `server/cmd/multica/cmd_agent.go`、`cmd_auth.go`、`cmd_setup.go`、`cmd_login_test.go` | 删掉官方云默认地址；`setup`、`setup cloud` 报错；没配服务端时 `login --token` 报错 | M2 |
 | `scripts/install.sh`、`install.ps1`、`install.test.sh` | 仓库地址改成本仓库；删掉 Homebrew 分支 | M2、M7 |
 | `server/pkg/db/queries/agent.sql` | 领取：实例行不受同任务互斥，普通运行只和普通运行互斥；排序依次是优先的实例、没有运行中实例的任务、上游原有顺序。重试保留批次、实例不续用会话；续用会话、待处理名额、合并评论、延后任务的提升都不把实例行算进去 | D1、D2、D6–D8、D12、D16 |
