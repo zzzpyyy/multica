@@ -1,3 +1,11 @@
+<!-- Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md. -->
+
+> [!IMPORTANT]
+> **本仓库基于 Multica（[multica-ai/multica](https://github.com/multica-ai/multica)）二次开发**，fork 自上游 v0.8.1（`b1ea927`），不是官方版本。
+> 上游的 [LICENSE](LICENSE) 和 [NOTICE](NOTICE) 原样保留；界面上的 Multica 名称和 Logo 未改。
+> 和上游相比加了：父任务嵌套看板、super-agent 对话式建任务和跟进、同一任务上加开多个智能体实例、Enter 发送。
+> 安装、连接方式和改动登记见下面的 [Fork 说明](#fork-说明)。下文其余内容是上游原文，其中官方云、Homebrew 的部分不适用于本 fork。
+
 <div align="center">
 
 <picture>
@@ -118,6 +126,49 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 - **[CLI and API](https://multica.ai/docs/cli) →** Every surface is scriptable. Agents drive Multica through the same CLI you do.
 
 ---
+
+## Fork 说明
+
+### 安装
+
+- **CLI**：`curl -fsSL https://raw.githubusercontent.com/zzzpyyy/multica/fork/scripts/install.sh | bash`。只从本仓库的 [Releases](https://github.com/zzzpyyy/multica/releases) 下载，不走 Homebrew。版本号形如 `0.8.1-fork.1`。
+- **CLI 没有默认服务端**：`multica setup` 和 `multica setup cloud` 会直接报错，请用 `multica setup self-host --server-url <你的服务端>`。没配服务端时 `multica login --token` 也会报错，不会把令牌发到官方云。
+- **macOS 桌面端**：从 Releases 下载对应芯片的安装包。安装包没有用 Apple 开发者证书签名，第一次打开会被拦下，到"系统设置 → 隐私与安全性"里点"仍要打开"。安装包里不带任何服务端地址，要先写好 `~/.multica/desktop.json`：
+
+  ```json
+  {"schemaVersion":1,"apiUrl":"https://<服务端>","wsUrl":"wss://<服务端>/ws","appUrl":"https://<Web 地址>"}
+  ```
+
+  缺这个文件时桌面端只显示配置错误页，不会连官方云。
+
+### 发版
+
+打 `v<上游版本>-fork.<n>` 的 tag 并推送，`.github/workflows/release.yml` 会构建 CLI 和 macOS 安装包，扫描解开后的安装包（`scripts/fork/check-public.sh --artifacts`），通过后发到本仓库的 Releases，并标为 latest。
+
+### 公开仓库的检查
+
+- `scripts/fork/check-public.sh`：扫描相对上游新增的所有提交（包括后来被删掉的内容和提交信息），以及解开后的安装包，不许出现内部域名、内网 IP、服务端地址和访问令牌。服务端地址的规则放在仓库外的 `~/.config/multica-fork/public-patterns`，每行一条正则。
+- `scripts/fork/check-modified-headers.sh`：改过的上游文件，开头几行要有 `Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.` 这句说明；写不了注释的文件（JSON）和会被重新生成的文件，列进 [MODIFICATIONS.md](MODIFICATIONS.md)。
+- 两个脚本在 CI 里每次推送都跑。推送前的钩子还会检查每个新提交的作者和提交者邮箱，装法：`git config core.hooksPath scripts/fork/git-hooks`。
+- 自测：`bash scripts/fork/check.test.sh`。
+
+### 合并上游
+
+合并一个新的上游版本时，在同一个提交里把 `scripts/fork/lib.sh` 的 `FORK_BASELINE` 改成那个版本的 commit。然后对照下面的登记表逐个核对改动点，重跑两个检查脚本和全部验收。
+
+### 改动登记
+
+新增的文件不登记。"验收"列是本 fork 需求文档里的验收编号。
+
+| 文件 | 目的 | 验收 |
+|---|---|---|
+| `README.md` | 开头的说明和本节 | G6 |
+| `.github/workflows/ci.yml` | 每次推送都跑 CI，加上 `fork-checks` 任务 | G7、G8 |
+| `.github/workflows/release.yml` | 只发 CLI 和 macOS 桌面端；删掉 Docker、Helm、Homebrew；tag 只认 `-fork.N`；发布前扫描安装包 | G7、M1、M5–M7 |
+| `.goreleaser.yml` | 删掉 `brews`；`prerelease: false`、`make_latest: true` | M5–M7 |
+| `server/internal/cli/update.go`、`update_source_test.go` | CLI 升级、daemon 自动升级、服务端下发的升级都查本仓库的 Releases（常量 `server/internal/cli/fork.go`） | M2、M7 |
+| `server/cmd/multica/cmd_agent.go`、`cmd_auth.go`、`cmd_setup.go`、`cmd_login_test.go` | 删掉官方云默认地址；`setup`、`setup cloud` 报错；没配服务端时 `login --token` 报错 | M2 |
+| `scripts/install.sh`、`install.ps1`、`install.test.sh` | 仓库地址改成本仓库；删掉 Homebrew 分支 | M2、M7 |
 
 ## Get started
 
