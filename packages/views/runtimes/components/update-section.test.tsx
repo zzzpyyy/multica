@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -5,7 +6,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { I18nProvider } from "@multica/core/i18n/react";
 import enCommon from "../../locales/en/common.json";
 import enRuntimes from "../../locales/en/runtimes.json";
-import { UpdateSection } from "./update-section";
+import { UpdateSection, isNewer, parseReleaseVersion } from "./update-section";
 
 const TEST_RESOURCES = { en: { common: enCommon, runtimes: enRuntimes } };
 
@@ -168,5 +169,35 @@ describe("UpdateSection non-release versions", () => {
       screen.queryByRole("button", { name: "Update" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Local build")).not.toBeInTheDocument();
+  });
+});
+
+// Fork: same release shape and ordering as the server's
+// IsReleaseVersion / IsNewerVersion (server/internal/cli/update.go).
+describe("fork release versions", () => {
+  it.each(["0.8.1", "v0.8.1", "0.8.1-fork.1", "v0.8.1-fork.10", " v0.8.1-fork.2 "])(
+    "accepts %j",
+    (v) => expect(parseReleaseVersion(v)).not.toBeNull(),
+  );
+  it.each([
+    "dev", "", "v0.8.1-fork.", "v0.8.1-rc.1", "v0.8.1-fork.-1", "v0.8.1-fork.1-3-gabc1234",
+    "0.8.1-fork.0-dev.dd84444fb515", "v0.8.1-fork.1-dirty", "v0.8.1-fork.1+build", "0.8.1.2",
+    "v0.8.1-fork.1-fork.2",
+  ])("rejects %j", (v) => expect(parseReleaseVersion(v)).toBeNull());
+
+  it.each([
+    ["v0.8.1-fork.2", "v0.8.1-fork.1", true],
+    ["v0.8.1-fork.10", "v0.8.1-fork.9", true],
+    ["v0.8.2-fork.1", "v0.8.1-fork.99", true],
+    ["v0.8.1-fork.1", "v0.8.1", true],
+    ["v0.8.1-fork.0", "v0.8.1", false],
+    ["v0.8.1-fork.2", "0.8.1-fork.2", false],
+    ["v0.8.1-fork.1", "v0.8.1-fork.2", false],
+    ["v0.8.1", "v0.8.1-fork.1", false],
+    ["v0.8.1-fork.2", "v0.8.1-fork.1-3-gabc1234", false],
+    ["v0.8.1-fork.2", "0.8.1-fork.0-dev.dd84444fb515", false],
+    ["v0.8.1-fork.2-1-gabc1234", "v0.8.1-fork.1", false],
+  ] as const)("isNewer(%j, %j) = %s", (latest, current, want) => {
+    expect(isNewer(latest, current)).toBe(want);
   });
 });

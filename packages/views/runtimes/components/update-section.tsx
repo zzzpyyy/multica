@@ -39,18 +39,23 @@ async function fetchLatestVersion(): Promise<string | null> {
 }
 
 /**
- * Parses a released CLI version ("v0.4.17" / "0.4.17") into comparable parts,
- * or null when the string is not a release version.
+ * Parses a released CLI version ("v0.4.17" / "0.4.17", or the fork's
+ * "v0.8.1-fork.2") into comparable (major, minor, patch, fork) parts, where a
+ * plain "x.y.z" has fork 0. Null when the string is not a release version.
  *
  * A daemon built from source reports a `git describe` string
- * ("v0.4.17-12-gabc1234") or the ldflags default ("dev"), and neither can be
- * ordered against a release tag. This mirrors `IsReleaseVersion` in
+ * ("v0.4.17-12-gabc1234", "v0.8.1-fork.1-3-gabc1234"), a dev stamp
+ * ("0.8.1-fork.0-dev.<sha>") or the ldflags default ("dev"), and none can be
+ * ordered against a release tag. This mirrors `parseReleaseVersion` in
  * server/internal/cli/update.go, which is how the daemon's own auto-update
  * loop decides the same question.
  */
-function parseReleaseVersion(v: string): number[] | null {
-  const parts = v.trim().replace(/^v/, "").split(".");
-  if (parts.length !== 3) return null;
+export function parseReleaseVersion(v: string): number[] | null {
+  const s = v.trim().replace(/^v/, "").trim();
+  const forkAt = s.indexOf("-fork.");
+  const core = forkAt < 0 ? s : s.slice(0, forkAt);
+  const parts = [...core.split("."), forkAt < 0 ? "0" : s.slice(forkAt + "-fork.".length)];
+  if (parts.length !== 4) return null;
   const parsed: number[] = [];
   for (const part of parts) {
     if (!/^\d+$/.test(part)) return null;
@@ -69,7 +74,7 @@ function parseReleaseVersion(v: string): number[] | null {
  * operator to replace a locally built binary on the strength of a claim we
  * could not make.
  */
-function isNewer(latest: string, current: string): boolean {
+export function isNewer(latest: string, current: string): boolean {
   const l = parseReleaseVersion(latest);
   const c = parseReleaseVersion(current);
   if (!l || !c) return false;
