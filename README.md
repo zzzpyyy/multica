@@ -173,6 +173,7 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 | `server/pkg/db/queries/issue.sql`、`workspace_delete.sql` | 删任务、删工作区时删掉实例批次（新表没有外键） | D |
 | `server/internal/service/task.go` | 领取后如果这个角色还有排队行和名额，再唤醒一次 daemon；实例的重试不看普通运行的待处理名额；认得新的唯一索引名 | D1、D2 |
 | `server/cmd/migrate/main.go` | 登记 9002–9004 的并发索引清理 | D |
+| `server/cmd/server/router.go` | 注册 `POST`/`GET /api/issues/{id}/instances` | D1、D5、D9、D11、D14、D15 |
 | `server/internal/service/task_channel_media_race_test.go`、`server/internal/handler/workspace_delete_manifest_test.go` | 唯一索引改名；新表 `agent_task_batch` 归入删工作区的清单 | D |
 
 ## Get started

@@ -11,6 +11,175 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createAgentTaskBatch = `-- name: CreateAgentTaskBatch :one
+INSERT INTO agent_task_batch (workspace_id, issue_id, agent_id, splits, requested_by_type, requested_by_id)
+VALUES ($1, $2, $3, $4::text[], $5, $6)
+RETURNING id, workspace_id, issue_id, agent_id, splits, requested_by_type, requested_by_id, settled_at, created_at
+`
+
+type CreateAgentTaskBatchParams struct {
+	WorkspaceID     pgtype.UUID `json:"workspace_id"`
+	IssueID         pgtype.UUID `json:"issue_id"`
+	AgentID         pgtype.UUID `json:"agent_id"`
+	Splits          []string    `json:"splits"`
+	RequestedByType string      `json:"requested_by_type"`
+	RequestedByID   pgtype.UUID `json:"requested_by_id"`
+}
+
+func (q *Queries) CreateAgentTaskBatch(ctx context.Context, arg CreateAgentTaskBatchParams) (AgentTaskBatch, error) {
+	row := q.db.QueryRow(ctx, createAgentTaskBatch,
+		arg.WorkspaceID,
+		arg.IssueID,
+		arg.AgentID,
+		arg.Splits,
+		arg.RequestedByType,
+		arg.RequestedByID,
+	)
+	var i AgentTaskBatch
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.IssueID,
+		&i.AgentID,
+		&i.Splits,
+		&i.RequestedByType,
+		&i.RequestedByID,
+		&i.SettledAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createInstanceTask = `-- name: CreateInstanceTask :one
+INSERT INTO agent_task_queue (
+    agent_id, runtime_id, issue_id, status, priority, force_fresh_session,
+    originator_user_id, accountable_user_id, originator_source, delegated_from_task_id,
+    rule_version_id, trigger_evidence_kind, trigger_evidence_ref_id,
+    runtime_mcp_overlay, runtime_connected_apps,
+    workflow_step, batch_id, batch_index, id
+)
+SELECT
+    $1, $2, $3, 'queued', $4, TRUE,
+    $5, $6, $7,
+    $8, $9,
+    $10, $11,
+    $12, $13,
+    (SELECT i.status FROM issue i WHERE i.id = $3),
+    $14, $15, $16
+WHERE lock_task_owner_rows($1, $3, $2)
+RETURNING id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, chat_session_id, autopilot_run_id, attempt, max_attempts, parent_task_id, failure_reason, trigger_summary, force_fresh_session, is_leader_task, wait_reason, initiator_user_id, handoff_note, prepare_lease_expires_at, squad_id, runtime_mcp_overlay, escalation_for_task_id, fire_at, originator_user_id, runtime_connected_apps, coalesced_comment_ids, delivered_comment_ids, chat_input_task_id, chat_finalize_deferred_at, originator_source, delegated_from_task_id, retry_of_task_id, rerun_of_task_id, rule_version_id, trigger_evidence_kind, trigger_evidence_ref_id, accountable_user_id, session_rollout_missing, retired_session_id, quick_actions_disabled, regenerate_quick_actions_for, branch_name, durable_work_dir, channel_context_revision, comment_thread_id, cancelled_by_type, cancelled_by_id, cancelled_by_name, issue_snapshot, workflow_step, batch_id, batch_index
+`
+
+type CreateInstanceTaskParams struct {
+	AgentID              pgtype.UUID `json:"agent_id"`
+	RuntimeID            pgtype.UUID `json:"runtime_id"`
+	IssueID              pgtype.UUID `json:"issue_id"`
+	Priority             int32       `json:"priority"`
+	OriginatorUserID     pgtype.UUID `json:"originator_user_id"`
+	AccountableUserID    pgtype.UUID `json:"accountable_user_id"`
+	OriginatorSource     pgtype.Text `json:"originator_source"`
+	DelegatedFromTaskID  pgtype.UUID `json:"delegated_from_task_id"`
+	RuleVersionID        pgtype.UUID `json:"rule_version_id"`
+	TriggerEvidenceKind  pgtype.Text `json:"trigger_evidence_kind"`
+	TriggerEvidenceRefID pgtype.UUID `json:"trigger_evidence_ref_id"`
+	RuntimeMcpOverlay    []byte      `json:"runtime_mcp_overlay"`
+	RuntimeConnectedApps []byte      `json:"runtime_connected_apps"`
+	BatchID              pgtype.UUID `json:"batch_id"`
+	BatchIndex           pgtype.Int2 `json:"batch_index"`
+	ID                   pgtype.UUID `json:"id"`
+}
+
+// One instance of a batch. Always a fresh session (D2); the workdir is per
+// task id, so instances never share one. Outside the pending-slot index
+// (batch_id IS NOT NULL), so k rows coexist with the main run's pending row.
+// Fenced against workspace teardown like CreateAgentTask.
+func (q *Queries) CreateInstanceTask(ctx context.Context, arg CreateInstanceTaskParams) (AgentTaskQueue, error) {
+	row := q.db.QueryRow(ctx, createInstanceTask,
+		arg.AgentID,
+		arg.RuntimeID,
+		arg.IssueID,
+		arg.Priority,
+		arg.OriginatorUserID,
+		arg.AccountableUserID,
+		arg.OriginatorSource,
+		arg.DelegatedFromTaskID,
+		arg.RuleVersionID,
+		arg.TriggerEvidenceKind,
+		arg.TriggerEvidenceRefID,
+		arg.RuntimeMcpOverlay,
+		arg.RuntimeConnectedApps,
+		arg.BatchID,
+		arg.BatchIndex,
+		arg.ID,
+	)
+	var i AgentTaskQueue
+	err := row.Scan(
+		&i.ID,
+		&i.AgentID,
+		&i.IssueID,
+		&i.Status,
+		&i.Priority,
+		&i.DispatchedAt,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.Result,
+		&i.Error,
+		&i.CreatedAt,
+		&i.Context,
+		&i.RuntimeID,
+		&i.SessionID,
+		&i.WorkDir,
+		&i.TriggerCommentID,
+		&i.ChatSessionID,
+		&i.AutopilotRunID,
+		&i.Attempt,
+		&i.MaxAttempts,
+		&i.ParentTaskID,
+		&i.FailureReason,
+		&i.TriggerSummary,
+		&i.ForceFreshSession,
+		&i.IsLeaderTask,
+		&i.WaitReason,
+		&i.InitiatorUserID,
+		&i.HandoffNote,
+		&i.PrepareLeaseExpiresAt,
+		&i.SquadID,
+		&i.RuntimeMcpOverlay,
+		&i.EscalationForTaskID,
+		&i.FireAt,
+		&i.OriginatorUserID,
+		&i.RuntimeConnectedApps,
+		&i.CoalescedCommentIds,
+		&i.DeliveredCommentIds,
+		&i.ChatInputTaskID,
+		&i.ChatFinalizeDeferredAt,
+		&i.OriginatorSource,
+		&i.DelegatedFromTaskID,
+		&i.RetryOfTaskID,
+		&i.RerunOfTaskID,
+		&i.RuleVersionID,
+		&i.TriggerEvidenceKind,
+		&i.TriggerEvidenceRefID,
+		&i.AccountableUserID,
+		&i.SessionRolloutMissing,
+		&i.RetiredSessionID,
+		&i.QuickActionsDisabled,
+		&i.RegenerateQuickActionsFor,
+		&i.BranchName,
+		&i.DurableWorkDir,
+		&i.ChannelContextRevision,
+		&i.CommentThreadID,
+		&i.CancelledByType,
+		&i.CancelledByID,
+		&i.CancelledByName,
+		&i.IssueSnapshot,
+		&i.WorkflowStep,
+		&i.BatchID,
+		&i.BatchIndex,
+	)
+	return i, err
+}
+
 const hasQueuedTaskForAgentOnRuntime = `-- name: HasQueuedTaskForAgentOnRuntime :one
 
 SELECT EXISTS (
@@ -34,4 +203,170 @@ func (q *Queries) HasQueuedTaskForAgentOnRuntime(ctx context.Context, arg HasQue
 	var has_queued bool
 	err := row.Scan(&has_queued)
 	return has_queued, err
+}
+
+const listAgentQueuedTaskIDsInClaimOrder = `-- name: ListAgentQueuedTaskIDsInClaimOrder :many
+SELECT atq.id FROM agent_task_queue atq
+WHERE atq.agent_id = $1 AND atq.status = 'queued'
+ORDER BY (atq.priority >= 10) DESC,
+         EXISTS (
+             SELECT 1 FROM agent_task_queue busy
+             WHERE busy.agent_id = atq.agent_id
+               AND busy.issue_id = atq.issue_id
+               AND busy.status IN ('dispatched', 'running', 'waiting_local_directory')
+         ) ASC,
+         atq.priority DESC, atq.created_at ASC, atq.id ASC
+`
+
+// The agent's queued rows in ClaimAgentTask's order (keep the ORDER BY in
+// sync), for "position p in the queue" (D5, D16).
+func (q *Queries) ListAgentQueuedTaskIDsInClaimOrder(ctx context.Context, agentID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listAgentQueuedTaskIDsInClaimOrder, agentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBatchTasks = `-- name: ListBatchTasks :many
+SELECT id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, chat_session_id, autopilot_run_id, attempt, max_attempts, parent_task_id, failure_reason, trigger_summary, force_fresh_session, is_leader_task, wait_reason, initiator_user_id, handoff_note, prepare_lease_expires_at, squad_id, runtime_mcp_overlay, escalation_for_task_id, fire_at, originator_user_id, runtime_connected_apps, coalesced_comment_ids, delivered_comment_ids, chat_input_task_id, chat_finalize_deferred_at, originator_source, delegated_from_task_id, retry_of_task_id, rerun_of_task_id, rule_version_id, trigger_evidence_kind, trigger_evidence_ref_id, accountable_user_id, session_rollout_missing, retired_session_id, quick_actions_disabled, regenerate_quick_actions_for, branch_name, durable_work_dir, channel_context_revision, comment_thread_id, cancelled_by_type, cancelled_by_id, cancelled_by_name, issue_snapshot, workflow_step, batch_id, batch_index FROM agent_task_queue
+WHERE batch_id = ANY($1::uuid[])
+ORDER BY batch_id, batch_index, created_at ASC, id ASC
+`
+
+// Every attempt of every instance of the given batches, oldest first.
+func (q *Queries) ListBatchTasks(ctx context.Context, batchIds []pgtype.UUID) ([]AgentTaskQueue, error) {
+	rows, err := q.db.Query(ctx, listBatchTasks, batchIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AgentTaskQueue{}
+	for rows.Next() {
+		var i AgentTaskQueue
+		if err := rows.Scan(
+			&i.ID,
+			&i.AgentID,
+			&i.IssueID,
+			&i.Status,
+			&i.Priority,
+			&i.DispatchedAt,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.Result,
+			&i.Error,
+			&i.CreatedAt,
+			&i.Context,
+			&i.RuntimeID,
+			&i.SessionID,
+			&i.WorkDir,
+			&i.TriggerCommentID,
+			&i.ChatSessionID,
+			&i.AutopilotRunID,
+			&i.Attempt,
+			&i.MaxAttempts,
+			&i.ParentTaskID,
+			&i.FailureReason,
+			&i.TriggerSummary,
+			&i.ForceFreshSession,
+			&i.IsLeaderTask,
+			&i.WaitReason,
+			&i.InitiatorUserID,
+			&i.HandoffNote,
+			&i.PrepareLeaseExpiresAt,
+			&i.SquadID,
+			&i.RuntimeMcpOverlay,
+			&i.EscalationForTaskID,
+			&i.FireAt,
+			&i.OriginatorUserID,
+			&i.RuntimeConnectedApps,
+			&i.CoalescedCommentIds,
+			&i.DeliveredCommentIds,
+			&i.ChatInputTaskID,
+			&i.ChatFinalizeDeferredAt,
+			&i.OriginatorSource,
+			&i.DelegatedFromTaskID,
+			&i.RetryOfTaskID,
+			&i.RerunOfTaskID,
+			&i.RuleVersionID,
+			&i.TriggerEvidenceKind,
+			&i.TriggerEvidenceRefID,
+			&i.AccountableUserID,
+			&i.SessionRolloutMissing,
+			&i.RetiredSessionID,
+			&i.QuickActionsDisabled,
+			&i.RegenerateQuickActionsFor,
+			&i.BranchName,
+			&i.DurableWorkDir,
+			&i.ChannelContextRevision,
+			&i.CommentThreadID,
+			&i.CancelledByType,
+			&i.CancelledByID,
+			&i.CancelledByName,
+			&i.IssueSnapshot,
+			&i.WorkflowStep,
+			&i.BatchID,
+			&i.BatchIndex,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIssueTaskBatches = `-- name: ListIssueTaskBatches :many
+SELECT id, workspace_id, issue_id, agent_id, splits, requested_by_type, requested_by_id, settled_at, created_at FROM agent_task_batch
+WHERE issue_id = $1 AND workspace_id = $2
+ORDER BY created_at DESC, id DESC
+`
+
+type ListIssueTaskBatchesParams struct {
+	IssueID     pgtype.UUID `json:"issue_id"`
+	WorkspaceID pgtype.UUID `json:"workspace_id"`
+}
+
+func (q *Queries) ListIssueTaskBatches(ctx context.Context, arg ListIssueTaskBatchesParams) ([]AgentTaskBatch, error) {
+	rows, err := q.db.Query(ctx, listIssueTaskBatches, arg.IssueID, arg.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AgentTaskBatch{}
+	for rows.Next() {
+		var i AgentTaskBatch
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.IssueID,
+			&i.AgentID,
+			&i.Splits,
+			&i.RequestedByType,
+			&i.RequestedByID,
+			&i.SettledAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
