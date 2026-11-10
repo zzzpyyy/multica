@@ -181,6 +181,25 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 | `server/internal/daemon/types.go`、`client.go`、`prompt.go`、`daemon.go` | daemon 声明 `multica-fork-v1`，认 `instance` 字段，提示词里加实例块 | D2–D4 |
 | `server/internal/daemon/execenv/execenv.go`、`local_worktree.go`、`local_worktree_test.go` | worktree 模式下实例用按运行生成的分支，不共用任务分支 | D2 |
 | `server/internal/service/task_channel_media_race_test.go`、`server/internal/handler/workspace_delete_manifest_test.go` | 唯一索引改名；新表 `agent_task_batch` 归入删工作区的清单 | D |
+| `packages/core/shortcuts/definitions.ts`、`store.test.ts` | 「发送」默认改成 Enter | C1–C10 |
+| `packages/views/editor/extensions/submit-shortcut.ts`、`index.ts`、`content-editor.tsx`、`title-editor.tsx` 及测试 | 提交键分两类：发一条消息（跟随设置，设为 Enter 时 ⌘+Enter 也发）、长文本（固定 ⌘+Enter）；按住提交键不重复提交、不插空行 | C1–C17 |
+| `packages/views/modals/create-issue.tsx`、`feedback.tsx`、`run-confirm.tsx`、`issues/components/wakeup-create.tsx`、`squads/components/squad-detail-page.tsx`、`settings/components/issue-statuses-tab.tsx`、`quick-actions/components/quick-action-dialog.tsx` 及测试 | 长文本类输入框和运行确认弹窗固定 ⌘+Enter；状态说明补输入法判断；快捷操作的提示词新增 ⌘+Enter 提交 | C11、C12、C14–C17 |
+| `packages/core/issues/stores/view-store.ts`、`views/issues/components/issues-header.tsx`、`issues/surface/use-issue-surface-controller.ts` | 看板「显示」菜单的「嵌套子任务」开关，默认开；开着时看板只取顶层任务 | A1、A15 |
+| `packages/views/issues/components/board-card.tsx`、`board-view.tsx`、`packages/core/issues/index.ts` | 卡片上的子任务摘要和展开列表（新组件在 `issues/components/nested-board/`）；卡片上的"<角色> 运行 m · 排队 q" | A2–A5、A12、A13、D5 |
+| `packages/views/issues/components/issue-detail.tsx` | 子任务进度按 done + cancelled 计数；实例列表 | A2、D5、D9 |
+| `packages/core/issues/ws-updaters.ts` 及测试 | 建子任务时刷新批量子任务查询；改父任务时在子任务缓存里也找旧父任务 | A8、A9 |
+| `packages/core/realtime/use-realtime-sync.ts` 及测试 | 回到前台、网络恢复时刷新任务数据；`task:*`、`daemon:register` 刷新全部实例查询；推送消息写入缓存并刷新未读；`chat:done` 刷新计划卡片 | A11、M4、D5、D9、F7、B2、B7 |
+| `packages/core/api/client.ts`、`schemas.ts`、`issues/queries.ts`、`types/index.ts` | 实例、super-agent、计划卡片的接口（契约第 3 节） | D、B |
+| `packages/views/issues/components/comment-card.tsx` | 实例发的评论标"实例 i/k · 分工" | D3 |
+| `packages/views/layout/global-shortcuts.tsx` 及测试 | ⌘+J 打开 super-agent 那段会话 | B1 |
+| `packages/views/chat/`（`chat-page.tsx`、`chat-window.tsx`、`chat-message-list.tsx`、`chat-session-header.tsx`、`chat-thread-list.tsx`、`use-chat-controller.ts`、`lib/quick-actions.ts`）及测试 | super-agent 的开通卡片、只有一段会话、不出现在新对话的选择里；计划卡片；流式输出时剥掉 `super-action` 围栏；`?message=` 定位并高亮 | B1–B7、B14、B15、B18、D13、D16、F7 |
+| `packages/views/issues/components/pickers/assignee-picker.tsx`、`editor/extensions/mention-suggestion.tsx`、`modals/quick-create-issue.tsx`、`modals/create-squad.tsx`、`autopilots/components/pickers/agent-picker.tsx`、`workflows/handoff-form.tsx` | 负责人、@、通过智能体创建、小队成员、自动化、交接的候选里不出现 super-agent | B 规则 7、G4 |
+| `apps/desktop/src/main/runtime-config-loader.ts`、`shared/runtime-config.ts`、`renderer/src/App.tsx` 及测试 | 正式版缺 `~/.multica/desktop.json` 时显示配置错误页，不连官方云；删掉内置的官方云地址 | M2、M3 |
+| `apps/desktop/src/main/daemon-manager.ts`、`shared/daemon-types.ts`、`renderer/src/components/daemon-settings-tab.tsx` 及测试 | 4 个 CLI 来源都只接受带 `-fork.` 的版本；都没有时不启动 daemon，设置页列出每个来源的结果 | M7、M8 |
+| `apps/desktop/src/main/cli-bootstrap.ts` | 回退下载改成本仓库的 Releases（常量 `apps/desktop/src/shared/fork.ts`） | M7 |
+| `apps/desktop/electron-builder.yml` | `publish` 改成本仓库 | M5、M6 |
+| `apps/desktop/src/main/updater.ts`、`shared/updater-types.ts`、`preload/`、`renderer/src/components/updates-settings-tab.tsx` 及测试；删掉 `updater-preferences.ts` 和它的测试 | 不签名就不自动检查更新；"检查更新"打开本仓库的 Releases 页面；自动更新开关一起删掉 | M5、M6 |
+| `packages/views/runtimes/components/update-section.tsx`、`common/cli-install-command.tsx`、`packages/core/runtimes/commands.ts` 及测试 | "有新版本"查本仓库；安装命令用本仓库的脚本（常量 `packages/core/fork.ts`）；删掉官方云地址 | M2、P7、P8 |
 
 ## Get started
 

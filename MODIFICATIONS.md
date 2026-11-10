@@ -18,3 +18,7 @@ Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIO
 | `server/pkg/db/queries/agent.sql` | D：领取逻辑让加开的实例和主实例并行，排序先给优先的实例、再给没有运行中实例的任务；重试、续用会话、待处理名额都区分实例行。sqlc 会把文件开头的注释抄进第一个查询的 Go 文档，所以不写文件头 |
 | `server/pkg/db/queries/issue.sql` | D：删任务时一起删掉它的实例批次。不写文件头，原因同上 |
 | `server/pkg/db/queries/workspace_delete.sql` | D：删工作区时一起删掉实例批次。不写文件头，原因同上 |
+| `packages/core/package.json` | B：导出 `./chat/super-agent`；F0：导出 `./fork`（仓库常量） |
+| `packages/views/locales/*/settings.json` | C：「发送」设置的说明只管发一条消息的输入框；F0：桌面端 CLI 来源检查结果和"检查更新"的文案，删掉自动更新开关的文案 |
+| `packages/views/locales/*/issues.json` | A：「嵌套子任务」开关和卡片摘要、展开列表的文案；D：实例列表、排队位置和原因的文案 |
+| `packages/views/locales/*/chat.json` | B：super-agent 开通、计划卡片、消息定位失败的文案 |
