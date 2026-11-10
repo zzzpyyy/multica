@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package handler
 
 import (
@@ -56,6 +58,9 @@ func (h *Handler) MoveIssue(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "unsupported move field: "+field)
 			return
 		}
+	}
+	if h.refuseInstanceOwnershipWrite(w, r, current, fields) {
+		return
 	}
 	if _, ok := fields["before_id"]; !ok {
 		writeError(w, http.StatusBadRequest, "before_id is required")

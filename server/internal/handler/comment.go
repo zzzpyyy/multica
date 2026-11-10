@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package handler
 
 import (
@@ -2711,6 +2713,11 @@ func (h *Handler) computeCommentAgentTriggers(ctx context.Context, issue db.Issu
 		// covered leader delegation (GH-8301). Explicit @agent / @squad mentions
 		// are already handled above, so neither fallback double-enqueues a
 		// mentioned target.
+		// Fork (D): an instance's comment wakes nobody implicitly; the merge
+		// party is woken once when the whole batch has finished.
+		if actorType == "agent" && h.isInstanceRun(ctx, opts.AuthoringTaskID) {
+			return nil, nil
+		}
 		if actorType == "agent" {
 			if triggers, handled := h.routeGuestSquadLeaderFallback(ctx, issue, parentComment, actorID, opts); handled {
 				return triggers, nil

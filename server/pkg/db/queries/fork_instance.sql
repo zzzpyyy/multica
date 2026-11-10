@@ -62,3 +62,6 @@ ORDER BY (atq.priority >= 10) DESC,
                AND busy.status IN ('dispatched', 'running', 'waiting_local_directory')
          ) ASC,
          atq.priority DESC, atq.created_at ASC, atq.id ASC;
+
+-- name: GetAgentTaskBatch :one
+SELECT * FROM agent_task_batch WHERE id = $1;

@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 // Package execenv manages isolated per-task execution environments for the daemon.
 // Each task gets its own directory with injected context files. Repositories are
 // checked out on demand by the agent via `multica repo checkout`.
@@ -239,6 +241,10 @@ type TaskContextForEnv struct {
 	InitiatorID    string
 	InitiatorName  string
 	InitiatorEmail string
+	// IsInstance marks one instance of an add-instances batch (fork, D). Its
+	// worktree branch is task-scoped: instances of one issue must not share
+	// the issue's conversation branch.
+	IsInstance bool
 }
 
 // SkillContextForEnv represents a skill to be written into the execution environment.

@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package daemon
 
 import (
@@ -197,6 +199,8 @@ type Task struct {
 	// Empty or non-task-scoped values are fatal for writable agent tasks; the
 	// daemon must not fall back to its own token. See MUL-3292.
 	AuthToken string `json:"auth_token,omitempty"`
+	// Fork (D): set when this run is one instance of an add-instances batch.
+	Instance *TaskInstance `json:"instance,omitempty"`
 }
 
 // ChatAttachmentMeta is the structured attachment metadata the daemon

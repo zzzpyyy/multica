@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package execenv
 
 import (
@@ -140,6 +142,9 @@ func (p LocalWorktreeParams) owner() branchOwner {
 // Tasks with neither an issue nor a chat session have no conversation to
 // continue and get "", "".
 func localWorktreeConversation(params PrepareParams) (key, id string) {
+	if params.Task.IsInstance {
+		return "", "" // Fork (D): agent/<agent>/<run-id-tail>, one per instance.
+	}
 	if params.Task.IssueID != "" {
 		if params.IssueIdentifier != "" {
 			return params.IssueIdentifier, params.Task.IssueID

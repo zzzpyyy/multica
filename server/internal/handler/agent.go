@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package handler
 
 import (
@@ -629,6 +631,8 @@ type AgentTaskResponse struct {
 	// owning user; the daemon must not fall back to its own credential. See
 	// MUL-3292.
 	AuthToken string `json:"auth_token,omitempty"`
+	// Fork (D): set for an instance row; see InstanceClaim.
+	Instance *InstanceClaim `json:"instance,omitempty"`
 }
 
 // TaskAttribution is the wire shape of a run's accountable-human provenance

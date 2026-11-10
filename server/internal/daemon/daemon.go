@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package daemon
 
 import (
@@ -7947,6 +7949,8 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 		NewCommentCount:     task.NewCommentCount,
 		NewCommentsSince:    task.NewCommentsSince,
 		PriorSessionResumed: task.PriorSessionID != "",
+		// Fork (D): instances get a task-scoped worktree branch.
+		IsInstance: task.Instance != nil,
 		// MUL-5305: the server sets this when a more recent Codex session was
 		// withheld (rollout missing) and PriorSessionID is an older fallback (or
 		// absent). Seed the brief's continuity disclosure from it; the local

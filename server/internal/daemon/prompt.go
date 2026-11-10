@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package daemon
 
 import (
@@ -75,6 +77,7 @@ func perTurnContextBlocks(task Task, opts promptOpts) string {
 	b.WriteString(buildJoinedWakeupsBlock(task.WakeupJoined))
 	b.WriteString(buildProjectWorkflowBlock(task))
 	b.WriteString(buildParentIssueBlock(task))
+	b.WriteString(buildInstanceBlock(task)) // Fork (D)
 	return b.String()
 }
 

@@ -180,6 +180,27 @@ func (q *Queries) CreateInstanceTask(ctx context.Context, arg CreateInstanceTask
 	return i, err
 }
 
+const getAgentTaskBatch = `-- name: GetAgentTaskBatch :one
+SELECT id, workspace_id, issue_id, agent_id, splits, requested_by_type, requested_by_id, settled_at, created_at FROM agent_task_batch WHERE id = $1
+`
+
+func (q *Queries) GetAgentTaskBatch(ctx context.Context, id pgtype.UUID) (AgentTaskBatch, error) {
+	row := q.db.QueryRow(ctx, getAgentTaskBatch, id)
+	var i AgentTaskBatch
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.IssueID,
+		&i.AgentID,
+		&i.Splits,
+		&i.RequestedByType,
+		&i.RequestedByID,
+		&i.SettledAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const hasQueuedTaskForAgentOnRuntime = `-- name: HasQueuedTaskForAgentOnRuntime :one
 
 SELECT EXISTS (
