@@ -181,10 +181,14 @@ func (s *TaskService) pushQuestion(ctx context.Context, q db.SuperAgentQuestion)
 }
 
 // AskUser is askUser for the HTTP layer (answer runs that end with ask).
-func (s *TaskService) AskUser(ctx context.Context, questionID pgtype.UUID) { s.askUser(ctx, questionID) }
+func (s *TaskService) AskUser(ctx context.Context, questionID pgtype.UUID) {
+	s.askUser(ctx, questionID)
+}
 
 // PushQuestion pushes a question that stays open after a partial answer.
-func (s *TaskService) PushQuestion(ctx context.Context, q db.SuperAgentQuestion) { s.pushQuestion(ctx, q) }
+func (s *TaskService) PushQuestion(ctx context.Context, q db.SuperAgentQuestion) {
+	s.pushQuestion(ctx, q)
+}
 
 // SweepSuperAgentQuestions re-enqueues questions whose answer run never
 // started or vanished, and after three attempts asks the member (rule 20).

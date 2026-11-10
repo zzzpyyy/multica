@@ -732,7 +732,7 @@ func main() {
 	// claim until the cache TTL expires.
 	taskSvc, autopilotSvc := backgroundServices(h)
 	registerAutopilotListeners(bus, autopilotSvc)
-	registerForkInstanceListeners(bus, taskSvc) // Fork (D)
+	registerForkInstanceListeners(bus, taskSvc)   // Fork (D)
 	registerForkSuperAgentListeners(bus, taskSvc) // Fork (B)
 
 	// Construct a LivenessStore that mirrors the one wired into the HTTP
