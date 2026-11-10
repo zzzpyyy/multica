@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { beforeEach, describe, expect, it } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import {
@@ -1173,5 +1174,44 @@ describe("sidebar issue lists", () => {
     qc.setQueryData(otherKey, { issues: [], total: 0 });
     onIssueDeleted(qc, WS_ID, ISSUE_ID);
     expect(invalidated(otherKey)).toBe(true);
+  });
+});
+
+// Fork (PRD A8, A9): on the nested board a sub-issue lives only in the
+// children caches, and the board reads the batched children query.
+describe("nested board children caches", () => {
+  it("A8: a created sub-issue invalidates the batched children query", () => {
+    const qc = new QueryClient();
+    const batchedKey = issueKeys.childrenByParents(WS_ID, [PARENT_ISSUE_ID]);
+    qc.setQueryData(batchedKey, new Map<string, Issue[]>());
+
+    onIssueCreated(qc, WS_ID, parentedIssue);
+
+    expectInvalidated(qc, batchedKey);
+  });
+
+  it("A9: clearing the parent refreshes the old parent found in the batched cache", () => {
+    const qc = new QueryClient();
+    const child: Issue = { ...parentedIssue, revision: 1 };
+    const batchedKey = issueKeys.childrenByParents(WS_ID, [PARENT_ISSUE_ID]);
+    // Only the board's batch holds the child: no list, detail or per-parent cache.
+    qc.setQueryData(batchedKey, new Map([[PARENT_ISSUE_ID, [child]]]));
+    qc.setQueryData(issueKeys.childProgress(WS_ID), { progress: [] });
+
+    onIssueUpdated(qc, WS_ID, { ...child, parent_issue_id: null, revision: 2 });
+
+    expectInvalidated(qc, batchedKey);
+    expectInvalidated(qc, issueKeys.childProgress(WS_ID));
+  });
+
+  it("A9: also finds the old parent in a per-parent children cache", () => {
+    const qc = new QueryClient();
+    const child: Issue = { ...parentedIssue, revision: 1 };
+    const childrenKey = issueKeys.children(WS_ID, PARENT_ISSUE_ID);
+    qc.setQueryData<Issue[]>(childrenKey, [child]);
+
+    onIssueUpdated(qc, WS_ID, { ...child, parent_issue_id: null, revision: 2 });
+
+    expectInvalidated(qc, childrenKey);
   });
 });

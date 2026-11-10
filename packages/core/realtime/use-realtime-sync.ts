@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useEffect, useRef } from "react";
@@ -1953,6 +1954,25 @@ export function useRealtimeSync(
 
     return unsub;
   }, [ws, qc]);
+
+  // Fork (PRD A11, M4): back online, or back in the foreground -> refetch
+  // issue data. A short network drop does not always close the WebSocket, so
+  // onReconnect may never fire, and TanStack's refetchOnReconnect skips every
+  // query because none goes stale under staleTime: Infinity.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const refresh = () => {
+      if (document.visibilityState === "hidden") return;
+      const wsId = getCurrentWsId();
+      if (wsId) qc.invalidateQueries({ queryKey: issueKeys.all(wsId) });
+    };
+    window.addEventListener("online", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("online", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [qc]);
 
   // New WSClient instance (workspace switch) -> invalidate workspace-scoped
   // queries to recover events missed while the previous instance was torn down.

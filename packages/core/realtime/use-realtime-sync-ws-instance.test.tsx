@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 /**
  * @vitest-environment jsdom
  */
@@ -795,5 +796,45 @@ describe("useRealtimeSync — member:removed", () => {
     expect(forgetLocalSearchIndex).toHaveBeenCalledWith("ws-1");
     // Let the relocate lookup settle before the test tears down.
     await waitFor(() => expect(qc.getQueryData(workspaceKeys.list())).toEqual([]));
+  });
+});
+
+// Fork (PRD A11, M4): the socket may survive a short network drop, so coming
+// back online or to the foreground must refetch issue data by itself.
+describe("useRealtimeSync — online / foreground refresh", () => {
+  let visibility: DocumentVisibilityState = "visible";
+  beforeEach(() => {
+    visibility = "visible";
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => visibility,
+    });
+  });
+  afterEach(() => cleanup());
+
+  const issueCalls = (spy: ReturnType<typeof vi.spyOn>) =>
+    spy.mock.calls.filter((args: unknown[]) =>
+      JSON.stringify((args[0] as InvalidateQueryFilters | undefined)?.queryKey) ===
+      JSON.stringify(issueKeys.all("ws-1")),
+    ).length;
+
+  it("invalidates issue queries on online and when the page becomes visible", () => {
+    const qc = new QueryClient();
+    const spy = vi.spyOn(qc, "invalidateQueries");
+    renderHook(() => useRealtimeSync(createMockWs(), createStores()), {
+      wrapper: createWrapper(qc),
+    });
+    spy.mockClear();
+
+    window.dispatchEvent(new Event("online"));
+    expect(issueCalls(spy)).toBe(1);
+
+    visibility = "hidden";
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(issueCalls(spy)).toBe(1);
+
+    visibility = "visible";
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(issueCalls(spy)).toBe(2);
   });
 });

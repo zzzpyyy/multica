@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { issueStatusCategory } from "./status-category";
 import type { QueryClient } from "@tanstack/react-query";
 import { issueKeys } from "./queries";
@@ -412,7 +413,36 @@ export function onIssueCreated(
   if (issue.parent_issue_id) {
     qc.invalidateQueries({ queryKey: issueKeys.children(wsId, issue.parent_issue_id) });
     qc.invalidateQueries({ queryKey: issueKeys.childProgress(wsId) });
+    // Fork (PRD A8): the nested board reads the batched children query.
+    qc.invalidateQueries({ queryKey: issueKeys.childrenByParentsAll(wsId) });
   }
+}
+
+/**
+ * Fork (PRD A9): the parent a sub-issue had, read from the children caches.
+ * On the nested board a sub-issue is in no list, flat or detail cache — only
+ * in its parent's per-parent children cache (hydrated by the batch, may be
+ * GC'd) and in the batch itself (kept alive by the board). Without this, the
+ * old parent of a sub-issue whose parent was cleared is never refreshed.
+ */
+function findParentInChildrenCaches(
+  qc: QueryClient,
+  wsId: string,
+  issueId: string,
+): string | null {
+  for (const [key, data] of qc.getQueriesData<Issue[]>({ queryKey: issueKeys.childrenAll(wsId) })) {
+    const parentId = key[key.length - 1];
+    if (typeof parentId === "string" && data?.some((child) => child.id === issueId)) return parentId;
+  }
+  for (const [, data] of qc.getQueriesData<Map<string, Issue[]>>({
+    queryKey: issueKeys.childrenByParentsAll(wsId),
+  })) {
+    if (!(data instanceof Map)) continue;
+    for (const [parentId, children] of data) {
+      if (children.some((child) => child.id === issueId)) return parentId;
+    }
+  }
+  return null;
 }
 
 export function onIssueUpdated(
@@ -451,7 +481,9 @@ export function onIssueUpdated(
     return;
   }
   const oldParentId =
-    detailData?.parent_issue_id ?? cachedIssue?.parent_issue_id ?? null;
+    detailData?.parent_issue_id ??
+    cachedIssue?.parent_issue_id ??
+    findParentInChildrenCaches(qc, wsId, issue.id);
   // The NEW parent comes from the WS payload when parent_issue_id changed
   const newParentId = issue.parent_issue_id ?? null;
   const parentChanged =
