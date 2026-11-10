@@ -169,6 +169,11 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 | `server/internal/cli/update.go`、`update_source_test.go` | CLI 升级、daemon 自动升级、服务端下发的升级都查本仓库的 Releases（常量 `server/internal/cli/fork.go`） | M2、M7 |
 | `server/cmd/multica/cmd_agent.go`、`cmd_auth.go`、`cmd_setup.go`、`cmd_login_test.go` | 删掉官方云默认地址；`setup`、`setup cloud` 报错；没配服务端时 `login --token` 报错 | M2 |
 | `scripts/install.sh`、`install.ps1`、`install.test.sh` | 仓库地址改成本仓库；删掉 Homebrew 分支 | M2、M7 |
+| `server/pkg/db/queries/agent.sql` | 领取：实例行不受同任务互斥，普通运行只和普通运行互斥；排序依次是优先的实例、没有运行中实例的任务、上游原有顺序。重试保留批次、实例不续用会话；续用会话、待处理名额、合并评论、延后任务的提升都不把实例行算进去 | D1、D2、D6–D8、D12、D16 |
+| `server/pkg/db/queries/issue.sql`、`workspace_delete.sql` | 删任务、删工作区时删掉实例批次（新表没有外键） | D |
+| `server/internal/service/task.go` | 领取后如果这个角色还有排队行和名额，再唤醒一次 daemon；实例的重试不看普通运行的待处理名额；认得新的唯一索引名 | D1、D2 |
+| `server/cmd/migrate/main.go` | 登记 9002–9004 的并发索引清理 | D |
+| `server/internal/service/task_channel_media_race_test.go`、`server/internal/handler/workspace_delete_manifest_test.go` | 唯一索引改名；新表 `agent_task_batch` 归入删工作区的清单 | D |
 
 ## Get started
 

@@ -504,6 +504,10 @@ cleared_pr_exclusions AS (
 ),
 cleared_unread AS (
     DELETE FROM issue_unread WHERE issue_id IN (SELECT target.id FROM target)
+),
+-- Fork (D): instance batches have no FK to issue (migration 9001).
+cleared_task_batches AS (
+    DELETE FROM agent_task_batch WHERE issue_id IN (SELECT target.id FROM target)
 )
 DELETE FROM issue WHERE issue.id IN (SELECT target.id FROM target);
 

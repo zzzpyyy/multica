@@ -565,6 +565,10 @@ deleted_child_events AS (
 deleted_unread AS (
  DELETE FROM issue_unread WHERE workspace_id=$1
 ),
+-- Fork (D): instance batches (migration 9001).
+deleted_task_batches AS (
+ DELETE FROM agent_task_batch WHERE workspace_id=$1
+),
 deleted_issues AS (
     DELETE FROM issue WHERE issue.workspace_id = $1
 ),

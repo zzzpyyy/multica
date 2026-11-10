@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package main
 
 import (
@@ -367,6 +369,9 @@ var concurrentIndexCleanups = map[string]string{
 	"482_agent_task_queue_telemetry_started_index":              "idx_agent_task_queue_telemetry_started",
 	"484_issue_triage_state_index":                              "idx_issue_triage_state",
 	"537_issue_duplicate_of_index":                              "idx_issue_duplicate_of",
+	// Fork (zzzpyyy/multica) migrations start at 9001.
+	"9002_fork_task_batch_index":      "idx_agent_task_queue_batch",
+	"9003_fork_pending_thread_unique": "idx_one_pending_task_per_issue_agent_thread_fork",
 }
 
 // concurrentDownIndexCleanups covers every migration whose down direction
@@ -398,6 +403,8 @@ var concurrentDownIndexCleanups = map[string]string{
 	"463_drop_issue_description_bigm_index":                 "idx_issue_description_bigm",
 	"464_drop_issue_description_trgm_index":                 "idx_issue_description_trgm",
 	"473_drop_agent_task_queue_chat_with_session_index":     "idx_agent_task_queue_chat_with_session_created_at",
+	// Fork: 9004 down rebuilds 452's index.
+	"9004_fork_drop_pending_thread_unique": "idx_one_pending_task_per_issue_agent_thread",
 }
 
 var preMigrationHooks = func() map[string]preMigrationHook {

@@ -14,3 +14,7 @@ Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIO
 
 | 文件 | 改动目的 |
 |---|---|
+| `server/pkg/db/generated/` | sqlc 生成的代码，每次 `make sqlc` 都会覆盖 |
+| `server/pkg/db/queries/agent.sql` | D：领取逻辑让加开的实例和主实例并行，排序先给优先的实例、再给没有运行中实例的任务；重试、续用会话、待处理名额都区分实例行。sqlc 会把文件开头的注释抄进第一个查询的 Go 文档，所以不写文件头 |
+| `server/pkg/db/queries/issue.sql` | D：删任务时一起删掉它的实例批次。不写文件头，原因同上 |
+| `server/pkg/db/queries/workspace_delete.sql` | D：删工作区时一起删掉实例批次。不写文件头，原因同上 |

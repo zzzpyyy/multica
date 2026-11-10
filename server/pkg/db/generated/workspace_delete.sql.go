@@ -244,6 +244,9 @@ deleted_child_events AS (
 deleted_unread AS (
  DELETE FROM issue_unread WHERE workspace_id=$1
 ),
+deleted_task_batches AS (
+ DELETE FROM agent_task_batch WHERE workspace_id=$1
+),
 deleted_issues AS (
     DELETE FROM issue WHERE issue.workspace_id = $1
 ),
@@ -263,6 +266,7 @@ deleted_issue_view_preferences AS (
 DELETE FROM quick_action WHERE quick_action.workspace_id = $1
 `
 
+// Fork (D): instance batches (migration 9001).
 func (q *Queries) DeleteWorkspaceIssueRoots(ctx context.Context, workspaceID pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deleteWorkspaceIssueRoots, workspaceID)
 	return err

@@ -513,7 +513,8 @@ INSERT INTO agent_task_queue (
     originator_source, delegated_from_task_id, rule_version_id,
     trigger_evidence_kind, trigger_evidence_ref_id, retry_of_task_id,
     chat_input_task_id, fire_at,
-    channel_context_revision, handoff_note, workflow_step, id
+    channel_context_revision, handoff_note, workflow_step, id,
+    batch_id, batch_index
 )
 SELECT
     p.agent_id, p.runtime_id, p.issue_id, p.chat_session_id, p.autopilot_run_id,
@@ -523,7 +524,9 @@ SELECT
     CASE WHEN p.failure_reason IS NOT DISTINCT FROM 'codex_semantic_inactivity' THEN NULL ELSE p.session_id END,
     p.work_dir,
     p.attempt + 1, COALESCE(sqlc.narg(max_attempts)::int, p.max_attempts), p.id,
-    p.failure_reason IS NOT DISTINCT FROM 'codex_semantic_inactivity',
+    -- Fork (D2): an instance retry never resumes a session; the newest one on
+    -- the issue may be a sibling instance's.
+    p.failure_reason IS NOT DISTINCT FROM 'codex_semantic_inactivity' OR p.batch_id IS NOT NULL,
     p.is_leader_task,
     p.squad_id,
     p.originator_user_id,
@@ -540,12 +543,16 @@ SELECT
     -- A retry continues its parent's work, so it keeps the parent's step (MUL-7420).
     p.workflow_step,
     -- Named new_task_id, not id: $1 above is the PARENT task's id.
-    COALESCE(sqlc.narg('new_task_id')::uuid, gen_random_uuid())
+    COALESCE(sqlc.narg('new_task_id')::uuid, gen_random_uuid()),
+    p.batch_id, p.batch_index
 FROM agent_task_queue p
 WHERE p.id = $1
   AND lock_task_owner_rows(p.agent_id, p.issue_id, p.runtime_id)
-ON CONFLICT (issue_id, agent_id, (COALESCE(comment_thread_id, '00000000-0000-0000-0000-000000000000'::uuid))) WHERE status IN ('queued', 'dispatched')
-       OR (status = 'deferred' AND context->>'channel_issue_media_pending' = 'true')
+-- Fork: the predicate matches idx_one_pending_task_per_issue_agent_thread_fork
+-- (migration 9003); instance rows are outside it and never conflict.
+ON CONFLICT (issue_id, agent_id, (COALESCE(comment_thread_id, '00000000-0000-0000-0000-000000000000'::uuid))) WHERE (status IN ('queued', 'dispatched')
+       OR (status = 'deferred' AND context->>'channel_issue_media_pending' = 'true'))
+      AND batch_id IS NULL
 DO NOTHING
 RETURNING *;
 
@@ -631,7 +638,7 @@ RETURNING *;
 UPDATE agent_task_queue
 SET status = 'cancelled', completed_at = now(), prepare_lease_expires_at = NULL,
     cancelled_by_type = 'system', cancelled_by_id = NULL, cancelled_by_name = NULL
-WHERE issue_id = $1 AND agent_id = $2
+WHERE issue_id = $1 AND agent_id = $2 AND batch_id IS NULL
   AND status IN ('queued', 'dispatched', 'deferred')
 RETURNING *;
 
@@ -641,7 +648,7 @@ RETURNING *;
 UPDATE agent_task_queue
 SET status = 'cancelled', completed_at = now(), prepare_lease_expires_at = NULL,
     cancelled_by_type = 'system', cancelled_by_id = NULL, cancelled_by_name = NULL
-WHERE issue_id = $1 AND agent_id = $2
+WHERE issue_id = $1 AND agent_id = $2 AND batch_id IS NULL
   AND status IN ('queued', 'dispatched', 'deferred')
   AND comment_thread_id IS NOT DISTINCT FROM comment_thread_root_id(sqlc.narg('thread_comment_id')::uuid)
 RETURNING *;
@@ -797,10 +804,14 @@ WHERE id = (
             AND COALESCE(r.last_seen_at, r.updated_at) >=
                 now() - make_interval(secs => @runtime_stale_secs::double precision)
       )
-      AND NOT EXISTS (
+      -- Fork (D): an instance row (batch_id set) runs beside the main run and
+      -- its siblings, so it skips this fence; normal runs fence only on other
+      -- normal runs (D1, D12).
+      AND (atq.batch_id IS NOT NULL OR NOT EXISTS (
           SELECT 1 FROM agent_task_queue active
           WHERE active.agent_id = atq.agent_id
             AND active.status IN ('dispatched', 'running', 'waiting_local_directory')
+            AND active.batch_id IS NULL
             AND (
               (atq.issue_id IS NOT NULL AND active.issue_id = atq.issue_id)
               OR (atq.chat_session_id IS NOT NULL AND active.chat_session_id = atq.chat_session_id)
@@ -813,8 +824,19 @@ WHERE id = (
                 AND active.autopilot_run_id IS NULL
               )
             )
-      )
-    ORDER BY atq.priority DESC, atq.created_at ASC, atq.id ASC
+      ))
+    -- Fork (D6, D7, D16): user-prioritised instances first (priority >= 10,
+    -- InstancePriorityBoost), then rows whose issue has no run of this agent in
+    -- flight, then upstream's order. With no instances the first two keys are
+    -- false for every candidate, so the order is upstream's.
+    ORDER BY (atq.priority >= 10) DESC,
+             EXISTS (
+                 SELECT 1 FROM agent_task_queue busy
+                 WHERE busy.agent_id = atq.agent_id
+                   AND busy.issue_id = atq.issue_id
+                   AND busy.status IN ('dispatched', 'running', 'waiting_local_directory')
+             ) ASC,
+             atq.priority DESC, atq.created_at ASC, atq.id ASC
     LIMIT 1
     FOR UPDATE SKIP LOCKED
 )
@@ -1058,12 +1080,14 @@ WITH retired_sessions AS (
     FROM agent_task_queue r
     WHERE r.agent_id = $1 AND r.issue_id = $2
       AND COALESCE(r.context->>'type', '') <> 'triage'
+      AND r.batch_id IS NULL
       AND r.retired_session_id IS NOT NULL
 ), resume_overflow_at AS (
     SELECT MAX(COALESCE(t.completed_at, t.started_at, t.dispatched_at, t.created_at)) AS at
     FROM agent_task_queue t
     WHERE t.agent_id = $1 AND t.issue_id = $2
       AND COALESCE(t.context->>'type', '') <> 'triage'
+      AND t.batch_id IS NULL
       AND t.status = 'failed'
       AND (
         COALESCE(t.failure_reason, '') = 'codex_resume_oversized'
@@ -1077,6 +1101,7 @@ WITH retired_sessions AS (
     FROM agent_task_queue t
     WHERE t.agent_id = $1 AND t.issue_id = $2
       AND COALESCE(t.context->>'type', '') <> 'triage'
+      AND t.batch_id IS NULL
       AND t.session_id IS NOT NULL
       AND t.status IN ('completed', 'failed', 'cancelled')
     ORDER BY t.session_id, COALESCE(t.completed_at, t.started_at, t.dispatched_at, t.created_at) DESC
@@ -1151,6 +1176,7 @@ LIMIT 1;
 SELECT COALESCE(session_rollout_missing, FALSE) FROM agent_task_queue
 WHERE agent_id = $1 AND issue_id = $2
   AND COALESCE(context->>'type', '') <> 'triage'
+  AND batch_id IS NULL
   AND status IN ('completed', 'failed')
   AND started_at IS NOT NULL
 ORDER BY COALESCE(completed_at, started_at, dispatched_at, created_at) DESC
@@ -1704,7 +1730,7 @@ WHERE context->>'wakeup_id' IS NULL AND issue_id = $1 AND status IN ('queued', '
 -- When head_sha is empty/NULL (issue has no linked PR) the check falls back to
 -- the pre-TEN-356 (issue_id, agent_id) key so non-PR issues keep coalescing.
 SELECT count(*) > 0 AS has_pending FROM agent_task_queue
-WHERE context->>'wakeup_id' IS NULL AND issue_id = $1 AND agent_id = $2
+WHERE context->>'wakeup_id' IS NULL AND batch_id IS NULL AND issue_id = $1 AND agent_id = $2
   AND (
     status IN ('queued', 'dispatched')
     OR (status = 'deferred' AND context->>'channel_issue_media_pending' = 'true')
@@ -1718,7 +1744,7 @@ WHERE context->>'wakeup_id' IS NULL AND issue_id = $1 AND agent_id = $2
 -- Same pending/head rules as HasPendingTaskForIssueAndAgent, scoped to one
 -- root comment and all descendants. NULL selects assignment-level work.
 SELECT count(*) > 0 AS has_pending FROM agent_task_queue
-WHERE context->>'wakeup_id' IS NULL AND issue_id = $1 AND agent_id = $2
+WHERE context->>'wakeup_id' IS NULL AND batch_id IS NULL AND issue_id = $1 AND agent_id = $2
   AND (
     status IN ('queued', 'dispatched')
     OR (status = 'deferred' AND context->>'channel_issue_media_pending' = 'true')
@@ -1735,7 +1761,7 @@ WHERE context->>'wakeup_id' IS NULL AND issue_id = $1 AND agent_id = $2
 -- that comment's old queued/dispatched tasks before re-computing triggers.
 -- Carries the same head_sha dedup key as HasPendingTaskForIssueAndAgent (TEN-356).
 SELECT count(*) > 0 AS has_pending FROM agent_task_queue
-WHERE context->>'wakeup_id' IS NULL AND issue_id = @issue_id
+WHERE context->>'wakeup_id' IS NULL AND batch_id IS NULL AND issue_id = @issue_id
   AND agent_id = @agent_id
   AND (
     status IN ('queued', 'dispatched')
@@ -1750,7 +1776,7 @@ WHERE context->>'wakeup_id' IS NULL AND issue_id = @issue_id
 -- name: HasPendingTaskForIssueAndAgentExcludingTriggerCommentInThread :one
 -- Thread-scoped edit preview: ignore the comment whose old run save replaces.
 SELECT count(*) > 0 AS has_pending FROM agent_task_queue
-WHERE context->>'wakeup_id' IS NULL AND issue_id = @issue_id
+WHERE context->>'wakeup_id' IS NULL AND batch_id IS NULL AND issue_id = @issue_id
   AND agent_id = @agent_id
   AND (
     status IN ('queued', 'dispatched')
@@ -1832,7 +1858,7 @@ SET coalesced_comment_ids = (
     runtime_connected_apps = sqlc.narg('new_runtime_connected_apps')
 WHERE id = (
     SELECT t.id FROM agent_task_queue t
-    WHERE t.context->>'wakeup_id' IS NULL AND t.issue_id = @issue_id
+    WHERE t.context->>'wakeup_id' IS NULL AND t.batch_id IS NULL AND t.issue_id = @issue_id
       AND t.agent_id = @agent_id
       AND t.comment_thread_id IS NOT DISTINCT FROM comment_thread_root_id(@new_trigger_comment_id::uuid)
       AND (
@@ -1919,7 +1945,7 @@ SET coalesced_comment_ids = (
     trigger_summary = sqlc.narg('trigger_summary')
 WHERE id = (
     SELECT t.id FROM agent_task_queue t
-    WHERE t.context->>'wakeup_id' IS NULL AND t.issue_id = @issue_id
+    WHERE t.context->>'wakeup_id' IS NULL AND t.batch_id IS NULL AND t.issue_id = @issue_id
       AND t.agent_id = @agent_id
       AND t.comment_thread_id IS NOT DISTINCT FROM comment_thread_root_id(@comment_id::uuid)
       AND (
@@ -2139,7 +2165,7 @@ LIMIT @max_per_tick;
 -- reconcile to schedule the guaranteed follow-up, and only enqueues fresh when
 -- NO active task exists.
 SELECT count(*) > 0 AS has_active FROM agent_task_queue
-WHERE issue_id = $1 AND agent_id = $2
+WHERE issue_id = $1 AND agent_id = $2 AND batch_id IS NULL
   AND (
     status IN ('queued', 'dispatched', 'running', 'waiting_local_directory')
     OR (status = 'deferred' AND context->>'channel_issue_media_pending' = 'true')
@@ -2148,7 +2174,7 @@ WHERE issue_id = $1 AND agent_id = $2
 -- name: HasActiveTaskForIssueAndAgentInThread :one
 -- Active execution and pending work in this comment thread only.
 SELECT count(*) > 0 AS has_active FROM agent_task_queue
-WHERE issue_id = $1 AND agent_id = $2
+WHERE issue_id = $1 AND agent_id = $2 AND batch_id IS NULL
   AND (
     status IN ('queued', 'dispatched', 'running', 'waiting_local_directory')
     OR (status = 'deferred' AND context->>'channel_issue_media_pending' = 'true')
@@ -2234,6 +2260,8 @@ WHERE r.runtime_id = ANY(@runtime_ids::uuid[])
       AND successor.agent_id = r.agent_id
       AND successor.comment_thread_id IS NOT DISTINCT FROM r.comment_thread_id
       AND successor.id <> r.id
+      AND successor.batch_id IS NOT DISTINCT FROM r.batch_id
+      AND successor.batch_index IS NOT DISTINCT FROM r.batch_index
       AND successor.status IN ('queued', 'dispatched', 'running', 'waiting_local_directory')
   )
 RETURNING *;
@@ -2257,8 +2285,9 @@ RETURNING *;
 WITH due AS (
     SELECT t.id,
            t.issue_id,
+           t.batch_id,
            row_number() OVER (
-               PARTITION BY t.issue_id, t.agent_id, t.comment_thread_id
+               PARTITION BY t.issue_id, t.agent_id, t.comment_thread_id, t.batch_id
                ORDER BY t.priority DESC, t.created_at ASC, t.id
            ) AS rn
     FROM agent_task_queue t
@@ -2272,9 +2301,10 @@ WITH due AS (
           AND COALESCE(r.last_seen_at, r.updated_at) >=
               now() - make_interval(secs => @runtime_stale_secs::double precision)
       )
-      AND NOT EXISTS (
+      AND (t.batch_id IS NOT NULL OR NOT EXISTS (
         SELECT 1 FROM agent_task_queue occupant
-        WHERE occupant.issue_id = t.issue_id
+        WHERE occupant.batch_id IS NULL
+          AND occupant.issue_id = t.issue_id
           AND occupant.agent_id = t.agent_id
           AND occupant.comment_thread_id IS NOT DISTINCT FROM t.comment_thread_id
           AND occupant.id <> t.id
@@ -2282,11 +2312,11 @@ WITH due AS (
             occupant.status IN ('queued', 'dispatched')
             OR (occupant.status = 'deferred' AND occupant.context->>'channel_issue_media_pending' = 'true')
           )
-      )
+      ))
 )
 UPDATE agent_task_queue
 SET status = 'queued'
-WHERE id IN (SELECT id FROM due WHERE issue_id IS NULL OR rn = 1)
+WHERE id IN (SELECT id FROM due WHERE issue_id IS NULL OR batch_id IS NOT NULL OR rn = 1)
 RETURNING *;
 
 -- name: ListQueuedClaimCandidatesByRuntimes :many
@@ -2360,8 +2390,9 @@ WHERE t.runtime_id = ANY(@runtime_ids::uuid[])
 WITH due AS (
     SELECT t.id,
            t.issue_id,
+           t.batch_id,
            row_number() OVER (
-               PARTITION BY t.issue_id, t.agent_id, t.comment_thread_id
+               PARTITION BY t.issue_id, t.agent_id, t.comment_thread_id, t.batch_id
                ORDER BY t.priority DESC, t.created_at ASC, t.id
            ) AS rn
     FROM agent_task_queue t
@@ -2375,9 +2406,10 @@ WITH due AS (
           AND COALESCE(r.last_seen_at, r.updated_at) >=
               now() - make_interval(secs => @runtime_stale_secs::double precision)
       )
-      AND NOT EXISTS (
+      AND (t.batch_id IS NOT NULL OR NOT EXISTS (
         SELECT 1 FROM agent_task_queue occupant
-        WHERE occupant.issue_id = t.issue_id
+        WHERE occupant.batch_id IS NULL
+          AND occupant.issue_id = t.issue_id
           AND occupant.agent_id = t.agent_id
           AND occupant.comment_thread_id IS NOT DISTINCT FROM t.comment_thread_id
           AND occupant.id <> t.id
@@ -2385,11 +2417,11 @@ WITH due AS (
             occupant.status IN ('queued', 'dispatched')
             OR (occupant.status = 'deferred' AND occupant.context->>'channel_issue_media_pending' = 'true')
           )
-      )
+      ))
 )
 UPDATE agent_task_queue
 SET status = 'queued'
-WHERE id IN (SELECT id FROM due WHERE issue_id IS NULL OR rn = 1)
+WHERE id IN (SELECT id FROM due WHERE issue_id IS NULL OR batch_id IS NOT NULL OR rn = 1)
 RETURNING *;
 
 -- name: ListActiveTasksByIssue :many

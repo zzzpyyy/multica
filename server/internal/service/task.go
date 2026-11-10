@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package service
 
 import (
@@ -741,7 +743,9 @@ func isDuplicatePendingTaskErr(err error) bool {
 		return false
 	}
 	switch pgErr.ConstraintName {
-	case "idx_one_pending_task_per_issue_agent", "idx_one_pending_task_per_issue_agent_v2", "idx_one_pending_task_per_issue_agent_thread":
+	case "idx_one_pending_task_per_issue_agent", "idx_one_pending_task_per_issue_agent_v2", "idx_one_pending_task_per_issue_agent_thread",
+		// Fork: migration 9003 replaces the thread index with one that skips instance rows.
+		"idx_one_pending_task_per_issue_agent_thread_fork":
 		return true
 	default:
 		return false
@@ -3616,6 +3620,8 @@ func (s *TaskService) claimTask(ctx context.Context, agentID, runtimeID pgtype.U
 	var claimed *db.AgentTaskQueue
 	var reclaimCheckAfter time.Time
 	var decisionDetail claimDecisionDetail
+	var runningBefore int64
+	var maxConcurrent int32
 	defer func() {
 		s.maybeLogClaimSlow(agentID, outcome, start, getAgentMs, countRunningMs, claimAgentMs, reanchorMs, updateStatusMs, dispatchMs)
 		s.recordClaimDecision(agentID, runtimeID, outcome, scope, decisionDetail)
@@ -3660,6 +3666,7 @@ func (s *TaskService) claimTask(ctx context.Context, agentID, runtimeID pgtype.U
 			outcome = "no_capacity"
 			return nil
 		}
+		runningBefore, maxConcurrent = running, agent.MaxConcurrentTasks
 
 		// Runtime-wide cap (GitHub #9626): several agents can share one
 		// runtime (e.g. one local GPU), so the per-agent cap alone cannot
@@ -3750,6 +3757,7 @@ func (s *TaskService) claimTask(ctx context.Context, agentID, runtimeID pgtype.U
 		return nil, nil
 	}
 	s.trackTaskForReclaim(*claimed, reclaimCheckAfter)
+	s.nudgeIfAgentHasMoreQueued(ctx, *claimed, runningBefore+1, maxConcurrent)
 
 	slog.Info("task claimed", "task_id", util.UUIDToString(claimed.ID), "agent_id", util.UUIDToString(agentID))
 	s.captureTaskDispatched(ctx, *claimed)
@@ -5664,7 +5672,9 @@ func isSourceContextQuickCreateTask(task db.AgentTaskQueue) bool {
 // Chat / quick-create tasks carry no issue_id, so the index cannot apply to them
 // and their retries can never collide.
 func hasRunnableSuccessor(ctx context.Context, q *db.Queries, task db.AgentTaskQueue) (bool, error) {
-	if !task.IssueID.Valid {
+	// Fork (D): an instance's retry is outside the pending slot, so a queued
+	// normal run is not its successor.
+	if !task.IssueID.Valid || task.BatchID.Valid {
 		return false, nil
 	}
 	return q.HasPendingTaskForIssueAndAgentInThread(ctx, db.HasPendingTaskForIssueAndAgentInThreadParams{
