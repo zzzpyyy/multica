@@ -72,6 +72,7 @@ import {
   sortChatSessions,
   QUICK_ACTIONS_PENDING_TIMEOUT_MS,
 } from "../chat/queries";
+import { superAgentKeys } from "../chat/super-agent";
 import { useChatStore } from "../chat";
 import { upsertChatMessageToCaches } from "../chat/message-cache";
 import {
@@ -201,11 +202,14 @@ export function applyChatMessageToCache(
   payload: ChatMessageEventPayload,
 ) {
   const sessionId = payload.chat_session_id;
-  if (payload.role === "user" && payload.message_id) {
+  // Fork (BUNN-28 §3.3): a task-less assistant message is a server-written
+  // super-agent push or receipt. No chat:done follows it, so write it here.
+  const isPush = payload.role === "assistant" && !payload.task_id;
+  if ((payload.role === "user" || isPush) && payload.message_id) {
     upsertChatMessageToCaches(qc, sessionId, {
       id: payload.message_id,
       chat_session_id: sessionId,
-      role: "user",
+      role: payload.role,
       content: payload.content ?? "",
       task_id: payload.task_id ?? null,
       created_at: payload.created_at ?? new Date().toISOString(),
@@ -1633,6 +1637,9 @@ export function useRealtimeSync(
       // Write the user turn before invalidating so the prompt does not depend
       // on the refetch surviving (MUL-5711) — same shape as chat:done.
       applyChatMessageToCache(qc, payload);
+      // Fork (F7): a push is a new unread assistant message — refresh the
+      // sessions list that the unread badge reads.
+      if (payload.role === "assistant" && !payload.task_id) invalidateSessionLists();
       // NOTE: intentionally does NOT touch the pending aggregate. chat:message
       // fires per streamed message with no status; the aggregate is maintained
       // by the task lifecycle handlers below (MUL-4159).
@@ -1658,6 +1665,9 @@ export function useRealtimeSync(
       // work: they ignore the extra fields and rely on the invalidate
       // below, which keeps the old behavior alive.
       applyChatDoneToCache(qc, payload);
+      // Fork (F6): a super-agent reply may carry a new plan card and expire
+      // the previous one. A no-op for sessions without a plan-cards query.
+      qc.invalidateQueries({ queryKey: superAgentKeys.planCards(payload.chat_session_id) });
       // NOTE: the pending aggregate is left to the task:completed / task:failed
       // handlers (which carry the task_id needed to remove the right entry).
       // chat:done no longer invalidates it, so a chatty session doesn't refetch

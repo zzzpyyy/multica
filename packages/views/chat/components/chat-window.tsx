@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -46,6 +47,8 @@ import { NoAgentBanner } from "./no-agent-banner";
 import { ArchivedAgentBanner } from "./archived-agent-banner";
 import { AgentAccessRevokedBanner } from "./agent-access-revoked-banner";
 import { RuntimeRequiredBanner } from "./runtime-required-banner";
+import { SuperAgentSetup } from "./super-agent-setup";
+import { isSuperAgent } from "@multica/core/chat/super-agent";
 import {
   chatSessionsOptions,
   pendingChatTaskOptions,
@@ -210,8 +213,10 @@ export function ChatWindow() {
 
   const currentMember = members.find((m) => m.user_id === user?.id);
   const memberRole = currentMember?.role;
+  // Fork (F5): the super-agent has one session, reached by ⌘+J — never a
+  // new-chat pick.
   const availableAgents = agents.filter(
-    (a) => !a.archived_at && canAssignAgent(a, user?.id, memberRole),
+    (a) => !a.archived_at && !isSuperAgent(a) && canAssignAgent(a, user?.id, memberRole),
   );
 
   // The agent bound to the OPEN session, resolved from the full agent list
@@ -926,6 +931,7 @@ export function ChatWindow() {
        *  We key off `noAgent` (the resolved-empty state) rather than
        *  `!activeAgent`, so the loading window between mount and the
        *  first agent-list response stays banner-free. */}
+      <SuperAgentSetup />
       {noAgent ? (
         <NoAgentBanner />
       ) : isAgentAccessRevoked ? (
@@ -1381,12 +1387,15 @@ function SessionDropdown({
             label: t(($) => $.session_history.row_rename_aria),
             onSelect: () => setRenamingId(session.id),
           },
-          {
-            key: "archive",
-            icon: <Archive className="size-3.5" />,
-            label: t(($) => $.list.archive),
-            onSelect: () => handleArchive(session),
-          },
+          // Fork (F5): the super-agent's only session cannot be archived.
+          ...(isSuperAgent(agent)
+            ? []
+            : [{
+                key: "archive",
+                icon: <Archive className="size-3.5" />,
+                label: t(($) => $.list.archive),
+                onSelect: () => handleArchive(session),
+              }]),
         ];
 
     return (

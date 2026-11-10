@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import {
   QueryClient,
   QueryObserver,
@@ -1288,6 +1289,25 @@ describe("applyChatMessageToCache", () => {
     );
 
     expect(qc.getQueryData<ChatMessage[]>(messagesKey)).toHaveLength(1);
+  });
+
+  // Fork (F7): a task-less assistant message is a super-agent push. No
+  // chat:done follows it, so this event is the only writer.
+  it("writes a task-less assistant push into the cache", () => {
+    const qc = createQueryClient();
+    qc.setQueryData<ChatMessage[]>(messagesKey, [userMessage()]);
+
+    applyChatMessageToCache(
+      qc,
+      messagePayload({ message_id: "msg-push", role: "assistant", content: "阶段 1 完成", task_id: undefined }),
+    );
+
+    expect(qc.getQueryData<ChatMessage[]>(messagesKey)?.at(-1)).toMatchObject({
+      id: "msg-push",
+      role: "assistant",
+      content: "阶段 1 完成",
+      task_id: null,
+    });
   });
 
   it("does not seed an unfetched cache — the first fetch owns it", () => {

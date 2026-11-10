@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -26,6 +27,7 @@ import {
   useDeleteChatSession,
   useSetChatSessionArchived,
 } from "@multica/core/chat/mutations";
+import { isSuperAgent } from "@multica/core/chat/super-agent";
 import { useChatStore } from "@multica/core/chat";
 import type { Agent, ChatSession } from "@multica/core/types";
 import { isImeComposing } from "@multica/core/utils";
@@ -254,8 +256,9 @@ export function ChatSessionHeader({
                   {t(($) => $.header.agent_settings)}
                 </DropdownMenuItem>
               )}
-              <DropdownMenuSeparator />
-              {isArchived ? (
+              {/* Fork (F5): the super-agent's only session cannot be archived or deleted. */}
+              {isSuperAgent(agent) ? null : <DropdownMenuSeparator />}
+              {isSuperAgent(agent) ? null : isArchived ? (
                 <>
                   <DropdownMenuItem onClick={doUnarchive}>
                     <ArchiveRestore className="h-4 w-4" />

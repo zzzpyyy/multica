@@ -98,6 +98,7 @@ import {
 import { toast } from "sonner";
 import type { Issue, Squad, SquadMember, SquadMemberStatus, Agent, MemberWithUser } from "@multica/core/types";
 import { matchesPinyin } from "../../editor/extensions/pinyin-match";
+import { isSuperAgent } from "@multica/core/chat/super-agent";
 
 const RECENT_WORK_LIMIT = 5;
 
@@ -278,7 +279,8 @@ export function SquadDetailPage() {
     );
   }
 
-  const availableAgents = agents.filter((a: Agent) => !a.archived_at && !members.some((m) => m.member_type === "agent" && m.member_id === a.id));
+  // Fork (F5): the super-agent only chats; it is never a run target.
+  const availableAgents = agents.filter((a: Agent) => !a.archived_at && !isSuperAgent(a) && !members.some((m) => m.member_type === "agent" && m.member_id === a.id));
   const availableMembers = wsMembers.filter((m) => !members.some((sm) => sm.member_type === "member" && sm.member_id === m.user_id));
   const isLeader = (m: SquadMember) => m.member_type === "agent" && squad.leader_id === m.member_id;
   const isArchived = (m: SquadMember) =>

@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -56,7 +57,9 @@ import {
   extractCopyText,
   splitTimeline,
 } from "../lib/copy-text";
-import { stripChatQuickActionsProtocol } from "../lib/quick-actions";
+import { stripChatProtocolFences } from "../lib/quick-actions";
+import { PlanCardsForMessage } from "./plan-cards";
+import { useFocusMessage } from "./use-focus-message";
 import { useT } from "../../i18n";
 
 // ─── Public component ────────────────────────────────────────────────────
@@ -102,6 +105,10 @@ interface ChatMessageListProps {
    * that reply until chat:quick_actions resolves it.
    */
   quickActionsPendingMessageId?: string | null;
+  /** Fork (F7): scroll to and highlight this message (`?message=`). */
+  focusMessageId?: string | null;
+  /** Fork (F7): the focused message is not in the loaded history window. */
+  onFocusMessageMissing?: () => void;
 }
 
 // ─── Virtuoso chrome ─────────────────────────────────────────────────────
@@ -201,6 +208,8 @@ export function ChatMessageList({
   quickActionsDisabled = false,
   onRegenerateQuickActions,
   quickActionsPendingMessageId = null,
+  focusMessageId = null,
+  onFocusMessageMissing,
 }: ChatMessageListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollContainerEl, setScrollContainerEl] = useState<HTMLDivElement | null>(null);
@@ -296,6 +305,22 @@ export function ChatMessageList({
   }, [messages, hasLive, pendingTaskId]);
 
   const firstIndex = renderItems.length > 0 ? firstItemIndex : 0;
+  // Virtuoso's scrollToIndex takes the 0-based data index, not firstItemIndex-based.
+  const scrollToRow = useCallback((index: number) => {
+    virtuosoRef.current?.scrollToIndex({ index, align: "center" });
+  }, []);
+  const highlightedMessageId = useFocusMessage({
+    messageId: focusMessageId,
+    index: focusMessageId
+      ? renderItems.findIndex((item) => item.kind === "message" && item.message.id === focusMessageId)
+      : -1,
+    ready: hasReachedLiveEnd,
+    hasOlder: hasOlderMessages,
+    isFetchingOlder: isFetchingOlderMessages,
+    loadOlder: onLoadOlderMessages,
+    scrollTo: scrollToRow,
+    onMissing: onFocusMessageMissing,
+  });
   const liveEndKey = renderItems[renderItems.length - 1]?.key ?? null;
 
   const listContext: ChatListContext = {
@@ -392,7 +417,15 @@ export function ChatMessageList({
         components={LIST_COMPONENTS}
         itemContent={(_, item) => (
           <div
-            className={cn(CHAT_COLUMN, "py-2")}
+            className={cn(
+              CHAT_COLUMN,
+              "py-2",
+              // Same tint as a deep-linked comment (comment-card.tsx).
+              item.kind === "message" &&
+                item.message.id === highlightedMessageId &&
+                "rounded-lg bg-[color-mix(in_srgb,var(--card)_95%,var(--brand)_5%)] transition-colors",
+            )}
+            {...(item.kind === "message" ? { "data-chat-message-id": item.message.id } : {})}
             {...(item.key === liveEndKey ? { [LIVE_END_ROW_ATTR]: "" } : {})}
           >
             <MessageBubble
@@ -658,6 +691,7 @@ function AssistantMessage({
             attachments={message.attachments}
             content={settledContent ?? message.content}
           />
+          <PlanCardsForMessage message={message} />
           <MessageFooter
             message={message}
             timeline={timeline}
@@ -701,8 +735,8 @@ function transformTimeline(
       ? {
           ...item,
           content: transformContent
-            ? transformContent(stripChatQuickActionsProtocol(item.content))
-            : stripChatQuickActionsProtocol(item.content),
+            ? transformContent(stripChatProtocolFences(item.content))
+            : stripChatProtocolFences(item.content),
         }
       : item,
   );

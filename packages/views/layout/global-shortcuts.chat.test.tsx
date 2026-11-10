@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "@testing-library/react";
 import { configureShortcutPlatform } from "@multica/core/shortcuts";
@@ -10,7 +11,14 @@ import { GlobalShortcuts } from "./global-shortcuts";
 // matters is not just "the chord calls toggle", but that it stays a no-op —
 // without swallowing the keypress — everywhere the overlay cannot exist.
 const h = vi.hoisted(() => ({
-  chat: { floatingChatEnabled: true, toggle: vi.fn() },
+  chat: {
+    floatingChatEnabled: true,
+    isOpen: false,
+    toggle: vi.fn(),
+    setSelectedAgentId: vi.fn(),
+    setActiveSession: vi.fn(),
+  },
+  superAgent: null as null | { id: string; session: { id: string } },
   navigation: { pathname: "/acme/issues", push: vi.fn() },
   toggleSidebar: vi.fn(),
   searchToggle: vi.fn(),
@@ -22,6 +30,12 @@ vi.mock("@multica/core/chat", () => ({
     { getState: () => h.chat },
   ),
 }));
+// Fork (F5): GlobalShortcuts reads the super-agent bootstrap for ⌘+J.
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQuery: () => ({ data: undefined }),
+  useQueryClient: () => ({ getQueryData: () => h.superAgent }),
+}));
 vi.mock("@multica/core/issues/stores", () => ({
   openCreateIssueWithPreference: vi.fn(),
 }));
@@ -29,6 +43,7 @@ vi.mock("@multica/core/modals", () => ({
   useModalStore: { getState: () => ({ modal: null }) },
 }));
 vi.mock("@multica/core/paths", () => ({
+  useCurrentWorkspace: () => ({ id: "ws-1" }),
   useWorkspacePaths: () => ({
     inbox: () => "/acme/inbox",
     chat: () => "/acme/chat",
@@ -69,6 +84,8 @@ beforeEach(() => {
   // Control would otherwise depend on where the suite runs.
   configureShortcutPlatform("macos");
   h.chat.floatingChatEnabled = true;
+  h.chat.isOpen = false;
+  h.superAgent = null;
   h.navigation.pathname = "/acme/issues";
 });
 
@@ -162,5 +179,32 @@ describe("chat toggle shortcut", () => {
     );
     expect(h.toggleSidebar).toHaveBeenCalledTimes(1);
     expect(h.chat.toggle).not.toHaveBeenCalled();
+  });
+});
+
+// Fork (PRD B1): ⌘+J opens on the super-agent's only session.
+describe("chat toggle shortcut — super-agent", () => {
+  it("opens on the super-agent session when it exists", () => {
+    h.superAgent = { id: "sa-1", session: { id: "sess-sa" } };
+    render(<GlobalShortcuts />);
+
+    pressToggleChat();
+    expect(h.chat.setSelectedAgentId).toHaveBeenCalledWith("sa-1");
+    expect(h.chat.setActiveSession).toHaveBeenCalledWith("sess-sa");
+    expect(h.chat.toggle).toHaveBeenCalledTimes(1);
+  });
+
+  it("closing does not switch the session; no super-agent leaves it alone", () => {
+    h.superAgent = { id: "sa-1", session: { id: "sess-sa" } };
+    h.chat.isOpen = true;
+    render(<GlobalShortcuts />);
+    pressToggleChat();
+    expect(h.chat.setActiveSession).not.toHaveBeenCalled();
+
+    h.chat.isOpen = false;
+    h.superAgent = null;
+    pressToggleChat();
+    expect(h.chat.setActiveSession).not.toHaveBeenCalled();
+    expect(h.chat.toggle).toHaveBeenCalledTimes(2);
   });
 });

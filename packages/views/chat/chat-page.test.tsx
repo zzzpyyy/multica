@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 // @vitest-environment jsdom
 
 import { StrictMode } from "react";
@@ -53,6 +54,7 @@ vi.mock("./components/new-chat-button", () => ({
 vi.mock("./components/offline-banner", () => ({
   OfflineBanner: () => null,
 }));
+vi.mock("./components/super-agent-setup", () => ({ SuperAgentSetup: () => null }));
 vi.mock("./components/no-agent-banner", () => ({
   NoAgentBanner: () => null,
 }));
@@ -73,6 +75,8 @@ vi.mock("@multica/ui/hooks/use-mobile", () => ({
   useIsCompact: () => layout.width < 768,
 }));
 vi.mock("@multica/core/paths", () => ({
+  // Fork (F5): no super-agent in these tests — the page behaves as upstream.
+  useCurrentWorkspace: () => null,
   useRequiredWorkspaceSlug: () => "acme",
   useWorkspacePaths: () => ({ chat: () => "/acme/chat" }),
 }));

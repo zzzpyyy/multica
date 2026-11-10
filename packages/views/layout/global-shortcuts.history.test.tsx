@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { configureShortcutPlatform } from "@multica/core/shortcuts";
@@ -7,6 +8,12 @@ import { GlobalShortcuts } from "./global-shortcuts";
 // GlobalShortcuts pulls workspace paths and the sidebar/chat stores at render
 // time; none of that is exercised by the history chords, so stub them to keep
 // the test focused on the back/forward wiring and free of provider setup.
+// Fork (F5): GlobalShortcuts reads the super-agent bootstrap for ⌘+J.
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQuery: () => ({ data: undefined }),
+  useQueryClient: () => ({ getQueryData: () => null }),
+}));
 vi.mock("@multica/ui/components/ui/sidebar", () => ({
   useSidebar: () => ({ toggleSidebar: vi.fn() }),
 }));
@@ -14,6 +21,7 @@ vi.mock("@multica/core/chat", () => ({
   useChatStore: { getState: () => ({ floatingChatEnabled: false }) },
 }));
 vi.mock("@multica/core/paths", () => ({
+  useCurrentWorkspace: () => ({ id: "ws-1" }),
   useWorkspacePaths: () => ({
     inbox: () => "/w/inbox",
     chat: () => "/w/chat",

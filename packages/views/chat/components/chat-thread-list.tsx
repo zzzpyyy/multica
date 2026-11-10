@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -25,6 +26,7 @@ import {
   useSetChatSessionArchived,
   useSetChatSessionPinned,
 } from "@multica/core/chat/mutations";
+import { isSuperAgent } from "@multica/core/chat/super-agent";
 import { useChatStore } from "@multica/core/chat";
 import type { Agent, ChatSession, PendingChatTasksResponse } from "@multica/core/types";
 import { ActorAvatar } from "../../common/actor-avatar";
@@ -271,7 +273,7 @@ export function ChatThreadList({
     // and the hover strip with it — so they cannot drift. The archived view
     // is the only place hard-delete lives; the history view offers the
     // reversible archive instead.
-    const rowActions: RowActionItem[] =
+    const allRowActions: RowActionItem[] =
       view === "archived"
         ? [
             {
@@ -318,6 +320,10 @@ export function ChatThreadList({
                   onSelect: () => onArchive(session),
                 },
           ];
+    // Fork (F5): the super-agent's only session cannot be archived or deleted.
+    const rowActions = isSuperAgent(agent)
+      ? allRowActions.filter((a) => a.key === "pin" || a.key === "stop")
+      : allRowActions;
 
     return (
       <div

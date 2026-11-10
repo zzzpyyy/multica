@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useEffect, useId, useMemo, useState } from "react";
@@ -33,6 +34,7 @@ import { PickerEmpty, PickerItem, PickerSection, PropertyPicker } from "../issue
 import { StatusIcon } from "../issues/components/status-icon";
 import { useStatusLabel } from "../issues/utils/status-label";
 import { useT } from "../i18n";
+import { isSuperAgent } from "@multica/core/chat/super-agent";
 
 const NOT_SET = "__not_set__";
 
@@ -416,7 +418,8 @@ function HandlerPicker({
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
   const matches = (name: string) => !q || name.toLowerCase().includes(q);
-  const agentRows = kind === "agent" ? agents.filter((a) => !a.archived_at && matches(a.name)) : [];
+  // Fork (F5): the super-agent only chats; it is never a run target.
+  const agentRows = kind === "agent" ? agents.filter((a) => !a.archived_at && !isSuperAgent(a) && matches(a.name)) : [];
   const memberRows = kind === "member" ? members.filter((m) => matches(m.name)) : [];
   const leadLabel = t(($) => $.workflows.handler.project_lead);
   const pick = (handler: IssueWorkflowStep["handler"]) => {

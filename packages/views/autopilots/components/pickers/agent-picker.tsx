@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useMemo, useState } from "react";
@@ -16,6 +17,7 @@ import {
 } from "../../../issues/components/pickers/property-picker";
 import { useT } from "../../../i18n";
 import { matchesPinyin } from "../../../editor/extensions/pinyin-match";
+import { isSuperAgent } from "@multica/core/chat/super-agent";
 
 export interface AssigneeSelection {
   type: AutopilotAssigneeType;
@@ -44,7 +46,8 @@ export function AgentPicker({
   const { data: agents = [] } = useQuery(agentListOptions(wsId));
   const { data: squads = [] } = useQuery(squadListOptions(wsId));
 
-  const activeAgents = useMemo(() => agents.filter((a) => !a.archived_at), [agents]);
+  // Fork (F5): the super-agent only chats; it is never a run target.
+  const activeAgents = useMemo(() => agents.filter((a) => !a.archived_at && !isSuperAgent(a)), [agents]);
   const activeSquads = useMemo(() => squads.filter((s) => !s.archived_at), [squads]);
   const agentsById = useMemo(
     () => new Map(activeAgents.map((agent) => [agent.id, agent])),

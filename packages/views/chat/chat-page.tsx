@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -6,7 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@multica/ui/components/ui/button";
 import { IconButton } from "@multica/ui/components/common/icon-button";
 import { useIsCompact } from "@multica/ui/hooks/use-mobile";
-import { useRequiredWorkspaceSlug, useWorkspacePaths } from "@multica/core/paths";
+import { useCurrentWorkspace, useRequiredWorkspaceSlug, useWorkspacePaths } from "@multica/core/paths";
 import { getCurrentSlug } from "@multica/core/platform";
 import { useChatStore } from "@multica/core/chat";
 import { chatQuickActionsPendingOptions } from "@multica/core/chat/queries";
@@ -35,6 +36,8 @@ import { NoAgentBanner } from "./components/no-agent-banner";
 import { ArchivedAgentBanner } from "./components/archived-agent-banner";
 import { AgentAccessRevokedBanner } from "./components/agent-access-revoked-banner";
 import { RuntimeRequiredBanner } from "./components/runtime-required-banner";
+import { SuperAgentSetup } from "./components/super-agent-setup";
+import { superAgentOptions } from "@multica/core/chat/super-agent";
 import { useRegisterCommandBarContext } from "../search/register-context";
 
 /**
@@ -67,6 +70,7 @@ export function ChatPage() {
   // can rehydrate the store before this page observes the destination URL.
   const isCurrentChatRoute = pathname === wsPaths.chat();
   const isCompact = useIsCompact();
+  const wsId = useCurrentWorkspace()?.id ?? "";
 
   const c = useChatController({
     isActive: isCurrentChatRoute && getCurrentSlug() === workspaceSlug,
@@ -82,6 +86,8 @@ export function ChatPage() {
   const regenerateQuickActions = useRegenerateChatQuickActions();
   const urlSession = searchParams.get("session") || null;
   const urlAgent = searchParams.get("agent") || null;
+  const urlMessage = searchParams.get("message") || null;
+  const { data: superAgent } = useQuery({ ...superAgentOptions(wsId), enabled: !!wsId });
 
   // "Composing a brand-new chat" — the user hit ⊕ but hasn't sent yet, so no
   // session exists. At compact widths this decides list-vs-conversation; on desktop the
@@ -225,6 +231,14 @@ export function ChatPage() {
       return;
     }
     if (consumedAgentIntent.current === urlAgent) return;
+    // Fork (F5): the super-agent has exactly one session — open it, never a new one.
+    if (superAgent && urlAgent === superAgent.id) {
+      consumedAgentIntent.current = urlAgent;
+      c.handleSelectSession(superAgent.session);
+      setComposingNew(false);
+      replace(`${wsPaths.chat()}?session=${superAgent.session.id}`);
+      return;
+    }
     const agent = c.availableAgents.find((a) => a.id === urlAgent);
     if (agent) {
       consumedAgentIntent.current = urlAgent;
@@ -238,7 +252,7 @@ export function ChatPage() {
       replace(wsPaths.chat());
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- consume when the URL param or the resolving agent list changes
-  }, [isCurrentChatRoute, workspaceSlug, urlAgent, c.availableAgents, c.agentsSettled]);
+  }, [isCurrentChatRoute, workspaceSlug, urlAgent, c.availableAgents, c.agentsSettled, superAgent]);
 
   const newChatButton = (
     <NewChatButton
@@ -349,6 +363,8 @@ export function ChatPage() {
               : undefined
           }
           quickActionsPendingMessageId={quickActionsPending?.message_id ?? null}
+          focusMessageId={urlMessage}
+          onFocusMessageMissing={() => toast.error(t(($) => $.super_agent.message_not_found))}
         />
       ) : (
         <EmptyState
@@ -359,6 +375,7 @@ export function ChatPage() {
         />
       )}
 
+      <SuperAgentSetup />
       {c.isAgentAccessRevoked ? (
         <AgentAccessRevokedBanner agentName={c.activeAgent?.name} />
       ) : c.noAgent ? (

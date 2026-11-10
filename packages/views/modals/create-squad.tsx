@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useMemo, useState } from "react";
@@ -43,6 +44,7 @@ import {
 } from "../issues/components/pickers/property-picker";
 import { matchesPinyin } from "../editor/extensions/pinyin-match";
 import { useT } from "../i18n";
+import { isSuperAgent } from "@multica/core/chat/super-agent";
 
 type SelectedMember = {
   type: "agent" | "member";
@@ -62,7 +64,9 @@ export function CreateSquadModal({ onClose }: { onClose: () => void }) {
   const currentUser = useAuthStore((s) => s.user);
   const currentUserId = currentUser?.id ?? null;
 
-  const { data: agents = [] } = useQuery(agentListOptions(wsId));
+  const { data: agentRows = [] } = useQuery(agentListOptions(wsId));
+  // Fork (F5): the super-agent only chats; it is never a run target.
+  const agents = useMemo(() => agentRows.filter((a) => !isSuperAgent(a)), [agentRows]);
   const { data: wsMembers = [] } = useQuery(memberListOptions(wsId));
 
   const activeAgents = useMemo(

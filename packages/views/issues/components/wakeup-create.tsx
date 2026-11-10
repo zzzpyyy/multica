@@ -78,6 +78,7 @@ import {
   type WakeupField,
   type WakeupRecurrence,
 } from "./wakeup-draft";
+import { isSuperAgent } from "@multica/core/chat/super-agent";
 
 const pillClass =
   "inline-flex h-7 max-w-full min-w-0 items-center gap-1.5 rounded-md border border-surface-border bg-surface px-2 text-label outline-none hover:bg-accent focus-visible:ring-3 focus-visible:ring-ring/50 data-popup-open:bg-accent [&_svg]:shrink-0";
@@ -647,7 +648,8 @@ function AgentChoice({
   const [open, setOpen] = useState(false);
   const { setFilter, matches } = useMatches();
   const { data = [] } = useQuery(agentListOptions(workspaceId));
-  const agents = useMemo(() => data.filter((a) => !a.archived_at), [data]);
+  // Fork (F5): the super-agent only chats; it is never a run target.
+  const agents = useMemo(() => data.filter((a) => !a.archived_at && !isSuperAgent(a)), [data]);
   const selected = agents.find((a) => a.id === value);
   const pick = (id: string) => {
     onChange(id);

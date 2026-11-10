@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -35,6 +36,7 @@ import {
   useSetChatSessionArchived,
 } from "@multica/core/chat/mutations";
 import { useChatStore } from "@multica/core/chat";
+import { isSuperAgent } from "@multica/core/chat/super-agent";
 import { upsertChatMessageToCaches } from "@multica/core/chat/message-cache";
 import {
   enqueuePendingChatTask,
@@ -331,8 +333,10 @@ export function useChatController(opts?: { isActive?: boolean }) {
 
   const currentMember = members.find((m) => m.user_id === user?.id);
   const memberRole = currentMember?.role;
+  // Fork (F5): the super-agent has one session, reached by ⌘+J — never a
+  // new-chat pick.
   const availableAgents = agents.filter(
-    (a) => !a.archived_at && canAssignAgent(a, user?.id, memberRole),
+    (a) => !a.archived_at && !isSuperAgent(a) && canAssignAgent(a, user?.id, memberRole),
   );
   // `availableAgents` is only trustworthy once BOTH queries above succeeded:
   // the permission filter reads the member role, so agents-without-members

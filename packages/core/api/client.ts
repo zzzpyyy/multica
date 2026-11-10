@@ -9,6 +9,7 @@ import type { ArchivedInboxPage, ArchivedInboxFacets } from "../types/inbox";
 import type { ListInstancesResponse } from "../types/instance";
 import { parseQoderConnection, parseQoderCatalog, type QoderInput } from "../runtimes/qoder-schema";
 import { configStore } from "../config";
+import type { PlanCard, SuperAgentBootstrap } from "../types/super-agent";
 import type {
   Issue,
   IssuePriority,
@@ -3897,6 +3898,32 @@ export class ApiClient {
 
   async deleteChatSession(id: string): Promise<void> {
     await this.fetch(`/api/chat/sessions/${id}`, { method: "DELETE" });
+  }
+
+  // ---- Fork: super-agent (BUNN-28 plan v2.2 §3.1) ----
+
+  /**
+   * Idempotent: returns the workspace's super-agent and this member's only
+   * session with it (201 provisioned now, 200 already provisioned). Without a
+   * `runtime_id` on a workspace that has none yet, the server answers
+   * `409 runtime_required` and writes nothing.
+   */
+  async bootstrapSuperAgent(
+    data: { runtime_id?: string; model?: string } = {},
+  ): Promise<SuperAgentBootstrap> {
+    return this.fetch("/api/agents/super-agent", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  }
+
+  async listPlanCards(sessionId: string): Promise<{ cards: PlanCard[] }> {
+    return this.fetch(`/api/chat/sessions/${sessionId}/plan-cards`);
+  }
+
+  /** Already creating/created/failed returns the current card without re-running. */
+  async decidePlanCard(id: string, decision: "confirm" | "cancel"): Promise<PlanCard> {
+    return this.fetch(`/api/chat/plan-cards/${id}/${decision}`, { method: "POST" });
   }
 
   // Refresh the quick-action suggestions for a session's latest assistant turn.

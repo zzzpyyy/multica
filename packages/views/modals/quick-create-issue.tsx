@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -88,6 +89,7 @@ import { useT } from "../i18n";
 import { matchesPinyin } from "../editor/extensions/pinyin-match";
 import { SourceContextPreviewCard, useSourceContextFailureMessage } from "./source-context-preview";
 import { useIssueLimitUpgradePrompt } from "./use-issue-limit-upgrade-prompt";
+import { isSuperAgent } from "@multica/core/chat/super-agent";
 
 type ActorSelection =
   | { type: "agent"; id: string }
@@ -166,6 +168,7 @@ export function AgentCreatePanel({
       agents.filter(
         (a) =>
           !a.archived_at &&
+          !isSuperAgent(a) && /* Fork (F5): the super-agent only chats; it is never a run target. */
           isAgentRuntimeBound(a) &&
           canAssignAgent(a, userId, memberRole),
       ),

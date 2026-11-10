@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import {
@@ -65,6 +66,7 @@ import {
 } from "../../common/picker-keys";
 import { isTriggerArmedAt } from "./suggestion-trigger-arming";
 import { blockedReasonLabel } from "../../issues/blocked-trigger-copy";
+import { isSuperAgent } from "@multica/core/chat/super-agent";
 
 // Types
 
@@ -776,6 +778,7 @@ export function createMentionSuggestion(
       .filter(
         (a) =>
           !a.archived_at &&
+          !isSuperAgent(a) && /* Fork (F5): the super-agent only chats; it is never a run target. */
           (a.name.toLowerCase().includes(q) || matchesPinyin(a.name, q)) &&
           canAssignAgentToIssue(a, { userId, role: myRole }).allowed,
       )

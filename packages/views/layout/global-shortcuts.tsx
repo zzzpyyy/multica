@@ -1,6 +1,8 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSidebar } from "@multica/ui/components/ui/sidebar";
 import {
   getShortcut,
@@ -11,8 +13,10 @@ import {
   type ShortcutActionId,
 } from "@multica/core/shortcuts";
 import { useChatStore } from "@multica/core/chat";
+import { superAgentKeys, superAgentOptions } from "@multica/core/chat/super-agent";
+import type { SuperAgentBootstrap } from "@multica/core/types/super-agent";
 import { useModalStore } from "@multica/core/modals";
-import { useWorkspacePaths } from "@multica/core/paths";
+import { useCurrentWorkspace, useWorkspacePaths } from "@multica/core/paths";
 import { isImeComposing } from "@multica/core/utils";
 import { isFloatingChatRouteSuppressed } from "../chat/floating-chat-visibility";
 import { useAppShell } from "./app-shell-context";
@@ -51,6 +55,11 @@ export function GlobalShortcuts() {
   const toggleNav = useAppShell()?.toggleNav ?? toggleSidebar;
   const navigation = useNavigation();
   const workspacePaths = useWorkspacePaths();
+  const qc = useQueryClient();
+  // Fork (F5): keep the super-agent's session id at hand for ⌘+J. Null-safe:
+  // the shell can mount before the workspace list resolves.
+  const wsId = useCurrentWorkspace()?.id ?? "";
+  useQuery({ ...superAgentOptions(wsId), enabled: !!wsId });
 
   // Subscribe so changing a binding in Settings immediately refreshes the
   // listener closure; getShortcut remains useful to non-React call sites.
@@ -104,7 +113,14 @@ export function GlobalShortcuts() {
         return;
       }
       if (actionId === "toggleChat") {
-        useChatStore.getState().toggle();
+        const chat = useChatStore.getState();
+        // Fork (PRD B rule 1): opening lands on the super-agent's only session.
+        const superAgent = qc.getQueryData<SuperAgentBootstrap | null>(superAgentKeys.bootstrap(wsId));
+        if (!chat.isOpen && superAgent) {
+          chat.setSelectedAgentId(superAgent.id);
+          chat.setActiveSession(superAgent.session.id);
+        }
+        chat.toggle();
         return;
       }
       if (actionId === "toggleSidebar") {
@@ -135,7 +151,7 @@ export function GlobalShortcuts() {
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [navigation, overrides, toggleNav, workspacePaths]);
+  }, [navigation, overrides, toggleNav, workspacePaths, qc, wsId]);
 
   return null;
 }

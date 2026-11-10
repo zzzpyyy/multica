@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 /**
  * Five-surface RichContent parity (MUL-4922).
  *
@@ -45,6 +46,8 @@ vi.mock("@multica/core/api", () => ({
 }));
 
 vi.mock("@multica/core/paths", () => ({
+  // Fork (F6): the chat message list looks up the super-agent per workspace.
+  useCurrentWorkspace: () => null,
   useWorkspacePaths: () => ({
     issueDetail: (id: string) => `/test/issues/${id}`,
     projectDetail: (id: string) => `/test/projects/${id}`,
