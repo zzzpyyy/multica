@@ -302,6 +302,7 @@
     "card_labels": "Etiquetas",
     "card_child_progress": "Progreso de subtareas",
     "show_sub_issues": "Mostrar subtareas",
+    "nested_sub_issues": "Anidar subtareas",
     "columns_section": "Columnas",
     "columns_locked_by_filter": "Quita el filtro de estado para mostrar u ocultar columnas.",
     "columns_shown": "{{count}} visibles",
@@ -877,6 +878,18 @@
   "card": {
     "update_failed": "No se ha podido actualizar la tarea",
     "updated_ago": "Actualizada {{time}}"
+  },
+  "nested": {
+    "cancelled": "incl. {{n}} cancelada(s)",
+    "stage": "Etapa {{current}}/{{max}}",
+    "stage_all_done": "Todas las etapas completadas",
+    "in_review": "{{n}} en revisión",
+    "blocked": "{{n}} bloqueada(s)",
+    "expand": "Expandir",
+    "collapse": "Contraer",
+    "group_stage": "Etapa {{n}}",
+    "group_unstaged": "Sin etapa",
+    "children_label": "Subtareas de {{identifier}}"
   },
   "actions": {
     "status": "Estado",

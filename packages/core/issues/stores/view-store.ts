@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useEffect, useRef } from "react";
@@ -361,6 +362,9 @@ export interface IssueViewState {
   // board / list / swimlane so users can focus on top-level parent issues.
   // Purely a display filter — it never touches the parent/child relationship.
   showSubIssues: boolean;
+  /** Fork (PRD A): the board shows top-level issues only, with each card
+   *  summarizing and expanding its direct sub-issues. Board view only. */
+  nestedSubIssues: boolean;
   listCollapsedStatuses: IssueStatus[];
   /**
    * Board / list columns the user hid, as concrete status keys.
@@ -437,6 +441,7 @@ export interface IssueViewState {
   toggleCardProperty: (key: keyof CardProperties) => void;
   toggleCardPropertyId: (propertyId: string) => void;
   toggleShowSubIssues: () => void;
+  toggleNestedSubIssues: () => void;
   toggleListCollapsed: (status: IssueStatus) => void;
   setSwimlaneGrouping: (grouping: SwimlaneGrouping) => void;
   /** Update the lane order for the currently active swimlane grouping. */
@@ -479,6 +484,7 @@ export const viewStoreSlice = (set: StoreApi<IssueViewState>["setState"]): Issue
   cardProperties: { ...DEFAULT_CARD_PROPERTIES },
   cardPropertyIds: [],
   showSubIssues: true,
+  nestedSubIssues: true,
   listCollapsedStatuses: [],
   hiddenStatuses: [...DEFAULT_HIDDEN_STATUSES],
   ganttZoom: "week",
@@ -731,6 +737,8 @@ export const viewStoreSlice = (set: StoreApi<IssueViewState>["setState"]): Issue
     })),
   toggleShowSubIssues: () =>
     set((state) => ({ showSubIssues: !state.showSubIssues })),
+  toggleNestedSubIssues: () =>
+    set((state) => ({ nestedSubIssues: !state.nestedSubIssues })),
   toggleListCollapsed: (status) =>
     set((state) => ({
       listCollapsedStatuses: state.listCollapsedStatuses.includes(status)
@@ -831,6 +839,7 @@ export const viewStorePersistOptions = (name: string) => ({
     cardProperties: state.cardProperties,
     cardPropertyIds: state.cardPropertyIds,
     showSubIssues: state.showSubIssues,
+    nestedSubIssues: state.nestedSubIssues,
     listCollapsedStatuses: state.listCollapsedStatuses,
     hiddenStatuses: state.hiddenStatuses,
     ganttZoom: state.ganttZoom,

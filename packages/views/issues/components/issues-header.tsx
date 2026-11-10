@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { cloneElement, useEffect, useMemo, useRef, useState } from "react";
@@ -1860,6 +1861,7 @@ export function IssueDisplayControls({
   const tableHierarchy = useViewStore((s) => s.tableHierarchy ?? true);
   const tableColumnCount = useViewStore((s) => s.tableColumns.length);
   const showSubIssues = useViewStore((s) => s.showSubIssues);
+  const nestedSubIssues = useViewStore((s) => s.nestedSubIssues);
   const hiddenStatuses = useViewStore((s) => s.hiddenStatuses);
   const act = useViewStoreApi().getState();
   const headerWsId = useWorkspaceId();
@@ -2272,6 +2274,18 @@ export function IssueDisplayControls({
                   onCheckedChange={() => act.toggleShowSubIssues()}
                 />
               </label>
+              {layout === "board" && (
+                <label className="flex cursor-pointer items-center justify-between gap-3">
+                  <span className="text-caption font-medium text-muted-foreground">
+                    {t(($) => $.display.nested_sub_issues)}
+                  </span>
+                  <Switch
+                    size="sm"
+                    checked={nestedSubIssues}
+                    onCheckedChange={() => act.toggleNestedSubIssues()}
+                  />
+                </label>
+              )}
             </div>
             {hasLayoutOptions && (
               <div className="mt-5 space-y-3">

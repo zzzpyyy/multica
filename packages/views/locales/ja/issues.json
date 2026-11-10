@@ -309,6 +309,7 @@
     "card_labels": "ラベル",
     "card_child_progress": "サブタスクの進捗",
     "show_sub_issues": "サブタスクを表示",
+    "nested_sub_issues": "サブタスクを入れ子表示",
     "layout_options": "{{layout}}のオプション"
   },
   "view": {
@@ -918,6 +919,18 @@
   "card": {
     "update_failed": "タスクを更新できませんでした",
     "updated_ago": "{{time}} に更新"
+  },
+  "nested": {
+    "cancelled": "うち {{n}} 件キャンセル",
+    "stage": "ステージ {{current}}/{{max}}",
+    "stage_all_done": "全ステージ完了",
+    "in_review": "{{n}} 件レビュー待ち",
+    "blocked": "{{n}} 件ブロック中",
+    "expand": "展開",
+    "collapse": "折りたたむ",
+    "group_stage": "ステージ {{n}}",
+    "group_unstaged": "ステージなし",
+    "children_label": "{{identifier}} のサブタスク"
   },
   "actions": {
     "rename_issue": "タスク名を変更",

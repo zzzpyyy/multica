@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -269,7 +270,8 @@ export function useIssueSurfaceController({
   const propertyFilters = useViewStore((s) => s.propertyFilters);
   const agentRunningFilter = useViewStore((s) => s.agentRunningFilter);
   const unreadFilter = useViewStore((s) => s.unreadFilter);
-  const showSubIssues = useViewStore((s) => s.showSubIssues);
+  const showSubIssuesSetting = useViewStore((s) => s.showSubIssues);
+  const nestedSubIssues = useViewStore((s) => s.nestedSubIssues);
   const ganttShowCompleted = useViewStore((s) => s.ganttShowCompleted);
   const cardProperties = useViewStore((s) => s.cardProperties);
   const swimlaneGrouping = useViewStore((s) => s.swimlaneGrouping);
@@ -371,6 +373,10 @@ export function useIssueSurfaceController({
   const effectiveViewMode = allowedModes.has(viewMode as IssueSurfaceMode)
     ? (viewMode as IssueSurfaceMode)
     : fallbackMode;
+  // Fork (PRD A1): the nested board holds top-level issues only; sub-issues
+  // live inside their parent's card whatever "Show sub-issues" says.
+  const showSubIssues =
+    showSubIssuesSetting && !(nestedSubIssues && effectiveViewMode === "board");
 
   useEffect(() => {
     if (!allowedModes.has(viewMode as IssueSurfaceMode)) {

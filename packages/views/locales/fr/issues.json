@@ -315,6 +315,7 @@
     "card_labels": "Étiquettes",
     "card_child_progress": "Avancement des sous-tâches",
     "show_sub_issues": "Afficher les sous-tâches",
+    "nested_sub_issues": "Imbriquer les sous-tâches",
     "layout_options": "Options de la vue {{layout}}"
   },
   "view": {
@@ -963,6 +964,18 @@
   "card": {
     "update_failed": "Échec de la mise à jour de la tâche",
     "updated_ago": "Mis à jour {{time}}"
+  },
+  "nested": {
+    "cancelled": "dont {{n}} annulée(s)",
+    "stage": "Étape {{current}}/{{max}}",
+    "stage_all_done": "Toutes les étapes terminées",
+    "in_review": "{{n}} en revue",
+    "blocked": "{{n}} bloquée(s)",
+    "expand": "Déplier",
+    "collapse": "Replier",
+    "group_stage": "Étape {{n}}",
+    "group_unstaged": "Sans étape",
+    "children_label": "Sous-tâches de {{identifier}}"
   },
   "actions": {
     "rename_issue": "Renommer la tâche",

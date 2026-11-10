@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useIssueStatuses } from "@multica/core/issue-statuses/hooks";
@@ -47,6 +48,7 @@ import { BoardCardContent } from "./board-card";
 import { InfiniteScrollSentinel } from "./infinite-scroll-sentinel";
 import { ListLoadMoreFooter } from "./list-load-more-footer";
 import type { ChildProgress } from "./list-row";
+import { NestedBoardProvider } from "./nested-board/use-nested-children";
 import type { IssueCreateDefaults } from "../surface/types";
 import type {
   IssueStatusPageState,
@@ -827,6 +829,7 @@ function BoardViewImpl({
 
   return (
     <BoardWorkflowContext.Provider value={boardWorkflow}>
+    <NestedBoardProvider issues={issues}>
     <DndContext
       sensors={sensors}
       collisionDetection={collisionDetection}
@@ -955,6 +958,7 @@ function BoardViewImpl({
         );
       }}
     />
+    </NestedBoardProvider>
     </BoardWorkflowContext.Provider>
   );
 }

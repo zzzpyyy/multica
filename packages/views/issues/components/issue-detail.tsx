@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { subIssueCreateDefaults } from "@multica/core/issues";
@@ -2306,7 +2307,9 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
         section.getBoundingClientRect().top - container.getBoundingClientRect().top - 16);
     });
   }, [setSubIssuesCollapsed, scrollContainerEl]);
-  const doneChildCount = childIssues.filter((child) => issueBehavesAs(child, "done")).length;
+  // Fork (PRD A2): closed = done + cancelled, the reading the board card and
+  // the server's stage gate use.
+  const doneChildCount = childIssues.filter((child) => issueBehavesAsAny(child, ["done", "closed"])).length;
 
   // The sub-issue list owns its selection, reset per issue. Rows, select-all
   // and the inline batch toolbar must read the same one: a peek renders this
@@ -3568,7 +3571,7 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
                 {parentIssue.title}
               </span>
               {parentChildIssues.length > 0 && (() => {
-                const done = parentChildIssues.filter((c) => issueBehavesAs(c, "done")).length;
+                const done = parentChildIssues.filter((c) => issueBehavesAsAny(c, ["done", "closed"])).length;
                 return (
                   <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-muted/60 px-1.5 py-0.5 shrink-0">
                     <ProgressRing done={done} total={parentChildIssues.length} size={11} />
@@ -3598,7 +3601,7 @@ export function IssueDetail({ issueId, onDelete, onDone, defaultSidebarOpen = tr
               parentIssue={parentIssue}
               parentProgress={parentChildIssues.length > 0
                 ? {
-                    done: parentChildIssues.filter((child) => issueBehavesAs(child, "done")).length,
+                    done: parentChildIssues.filter((child) => issueBehavesAsAny(child, ["done", "closed"])).length,
                     total: parentChildIssues.length,
                   }
                 : undefined}

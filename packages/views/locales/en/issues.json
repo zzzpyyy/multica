@@ -315,6 +315,7 @@
     "card_labels": "Labels",
     "card_child_progress": "Sub-issue progress",
     "show_sub_issues": "Show sub-issues",
+    "nested_sub_issues": "Nest sub-issues",
     "layout_options": "{{layout}} options"
   },
   "view": {
@@ -963,6 +964,18 @@
   "card": {
     "update_failed": "Failed to update issue",
     "updated_ago": "Updated {{time}}"
+  },
+  "nested": {
+    "cancelled": "incl. {{n}} cancelled",
+    "stage": "Stage {{current}}/{{max}}",
+    "stage_all_done": "All stages done",
+    "in_review": "{{n}} in review",
+    "blocked": "{{n}} blocked",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "group_stage": "Stage {{n}}",
+    "group_unstaged": "No stage",
+    "children_label": "Sub-issues of {{identifier}}"
   },
   "actions": {
     "rename_issue": "Rename issue",

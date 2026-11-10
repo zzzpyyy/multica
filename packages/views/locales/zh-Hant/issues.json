@@ -309,6 +309,7 @@
     "card_labels": "標籤",
     "card_child_progress": "子任務進度",
     "show_sub_issues": "顯示子任務",
+    "nested_sub_issues": "巢狀子任務",
     "layout_options": "{{layout}}選項"
   },
   "view": {
@@ -918,6 +919,18 @@
   "card": {
     "update_failed": "更新任務失敗",
     "updated_ago": "更新於 {{time}}"
+  },
+  "nested": {
+    "cancelled": "含 {{n}} 個已取消",
+    "stage": "階段 {{current}}/{{max}}",
+    "stage_all_done": "階段已全部完成",
+    "in_review": "{{n}} 待驗收",
+    "blocked": "{{n}} 阻塞",
+    "expand": "展開",
+    "collapse": "收起",
+    "group_stage": "階段 {{n}}",
+    "group_unstaged": "未分階段",
+    "children_label": "{{identifier}} 的子任務"
   },
   "actions": {
     "rename_issue": "重新命名任務",

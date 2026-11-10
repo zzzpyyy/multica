@@ -309,6 +309,7 @@
     "card_labels": "라벨",
     "card_child_progress": "하위 태스크 진행률",
     "show_sub_issues": "하위 태스크 표시",
+    "nested_sub_issues": "하위 태스크 중첩 표시",
     "layout_options": "{{layout}} 옵션"
   },
   "view": {
@@ -918,6 +919,18 @@
   "card": {
     "update_failed": "태스크를 업데이트하지 못했습니다",
     "updated_ago": "{{time}} 수정됨"
+  },
+  "nested": {
+    "cancelled": "취소 {{n}}개 포함",
+    "stage": "단계 {{current}}/{{max}}",
+    "stage_all_done": "모든 단계 완료",
+    "in_review": "검토 대기 {{n}}",
+    "blocked": "차단됨 {{n}}",
+    "expand": "펼치기",
+    "collapse": "접기",
+    "group_stage": "단계 {{n}}",
+    "group_unstaged": "단계 없음",
+    "children_label": "{{identifier}}의 하위 태스크"
   },
   "actions": {
     "rename_issue": "태스크 이름 변경",
