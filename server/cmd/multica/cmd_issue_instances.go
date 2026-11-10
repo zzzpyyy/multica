@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -86,7 +88,7 @@ func runIssueAddInstances(cmd *cobra.Command, args []string) error {
 	var batch map[string]any
 	body := map[string]any{"agent_id": agentID, "splits": splits, "priority": priority}
 	if err := client.PostJSON(ctx, "/api/issues/"+url.PathEscape(issueRef.ID)+"/instances", body, &batch); err != nil {
-		return fmt.Errorf("add instances: %w", err)
+		return instanceRequestError(err)
 	}
 	if out, _ := cmd.Flags().GetString("output"); out == "json" {
 		return cli.PrintJSON(os.Stdout, batch)
@@ -162,4 +164,25 @@ func intVal(v any) int {
 		return int(f)
 	}
 	return 0
+}
+
+// instanceRequestError shows the server's reason for a refused request
+// ("code: message"). The CLI's generic copy for 403 ("no permission") would
+// hide which rule refused it, e.g. priority_requires_member (D15).
+func instanceRequestError(err error) error {
+	var httpErr *cli.HTTPError
+	if errors.As(err, &httpErr) && httpErr.StatusCode >= 400 && httpErr.StatusCode < 500 {
+		var body struct {
+			Error string `json:"error"`
+			Code  string `json:"code"`
+		}
+		if json.Unmarshal([]byte(httpErr.Body), &body) == nil && body.Error != "" {
+			msg := body.Error
+			if body.Code != "" {
+				msg = body.Code + ": " + msg
+			}
+			return cli.WithUserMessage("add instances refused: "+msg, err)
+		}
+	}
+	return fmt.Errorf("add instances: %w", err)
 }

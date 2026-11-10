@@ -152,6 +152,10 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 - 两个脚本在 CI 里每次推送都跑。推送前的钩子还会检查每个新提交的作者和提交者邮箱，装法：`git config core.hooksPath scripts/fork/git-hooks`。
 - 自测：`bash scripts/fork/check.test.sh`。
 
+### D 组验收脚本
+
+`scripts/fork/d-acceptance.mjs` 只用 CLI 跑 D1–D12、D14、D15，每条打印 PASS/FAIL 和它核对的证据。需要一个测试环境：两个跑在同一个 Claude 运行环境上的智能体 TB、TL，CLI 指向测试服务端，例如 `MULTICA="multica --profile test" node scripts/fork/d-acceptance.mjs all`。它会建任务、起运行，不要对正式环境跑。合并上游以后重跑一遍。
+
 ### 合并上游
 
 合并一个新的上游版本时，在同一个提交里把 `scripts/fork/lib.sh` 的 `FORK_BASELINE` 改成那个版本的 commit。然后对照下面的登记表逐个核对改动点，重跑两个检查脚本和全部验收。

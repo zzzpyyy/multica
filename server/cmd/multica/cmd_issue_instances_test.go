@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/multica-ai/multica/server/internal/cli"
 )
 
 // Fork (D): `multica issue add-instances` request shape and local rejects (D11).
@@ -71,5 +73,30 @@ func TestRunIssueAddInstancesRejectsEmptySplitLocally(t *testing.T) {
 		if err := runIssueAddInstances(cmd, []string{"T-1"}); err == nil {
 			t.Fatalf("splits %q accepted", splits)
 		}
+	}
+}
+
+func TestRunIssueAddInstancesShowsServerReason(t *testing.T) {
+	const issueID = "11111111-1111-1111-1111-111111111111"
+	const agentID = "22222222-2222-2222-2222-222222222222"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/issues/"+issueID:
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": issueID, "identifier": "T-1"})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/agents":
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"id": agentID, "name": "TB"}})
+		case r.Method == http.MethodPost:
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(map[string]string{"code": "priority_requires_member", "error": "only a request from a user can set priority"})
+		default:
+			_ = json.NewEncoder(w).Encode([]map[string]any{})
+		}
+	}))
+	defer srv.Close()
+	setCLITestServerEnv(t, srv.URL)
+	t.Setenv("MULTICA_TOKEN", "mat_test-token")
+	err := runIssueAddInstances(newAddInstancesTestCmd(agentID, []string{"f"}, true), []string{issueID})
+	if got := cli.FormatError(err, false); !strings.Contains(got, "priority_requires_member: only a request from a user can set priority") {
+		t.Fatalf("message = %q", got)
 	}
 }
