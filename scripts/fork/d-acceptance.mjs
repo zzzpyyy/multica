@@ -22,6 +22,8 @@ const CLI = (process.env.MULTICA || "multica").split(/\s+/).filter(Boolean);
 const TB = process.env.TB || "TB";
 const TL = process.env.TL || "TL";
 const SLEEP = Number(process.env.SLEEP || 60);
+// A TB/TL run spends minutes in the model besides SLEEP; waits allow for it.
+const MODEL_SLACK = Number(process.env.MODEL_SLACK || 420);
 let failures = 0;
 
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
@@ -104,7 +106,7 @@ const cases = {
       const i = batches(x)[0].instances;
       return i.every((v) => v.session_id) ? i : null;
     });
-    const done = await waitFor("all ended", SLEEP + 240, () => {
+    const done = await waitFor("all ended", SLEEP + MODEL_SLACK, () => {
       const i = batches(x)[0];
       return i.instances.every((v) => ["completed", "failed", "cancelled"].includes(v.status)) ? i : null;
     });
@@ -115,22 +117,24 @@ const cases = {
         `sessions ${[...sessions].map((s) => s.slice(0, 8))} (while running), workdirs distinct=${dirs.size === 3}, part.txt=${parts} (want a,b,c; ? = workdir not on this machine)`);
     } else check("D2", false, "session ids never reported");
     const lastEnd = done ? Math.max(...done.instances.map((i) => Date.parse(i.completed_at))) : 0;
-    const tlRun = await waitFor("TL woken", 150, () => runs(x).find((r) => r.agent_id === agentID(TL) && r.status === "completed"));
+    // D3 times the wake-up (the TL run is queued), not how long TL then takes.
+    await waitFor("TL woken", 120, () => runs(x).find((r) => r.agent_id === agentID(TL)));
+    await waitFor("TL reply", MODEL_SLACK, () => comments(x).find((c) => c.author_id === agentID(TL)));
     const all = runs(x).filter((r) => r.agent_id === agentID(TL));
     const cs = comments(x);
     const ids = new Set(done?.instances.flatMap((i) => i.task_ids) ?? []);
     const results = cs.filter((c) => ids.has(c.source_task_id) && /完成：[abc]/.test(c.content));
     const summary = cs.find((c) => c.author_type === "system" && c.content.startsWith("加开的"));
-    check("D3", results.length === 3 && all.length === 1 && Date.parse(all[0].created_at) >= lastEnd - 1000 &&
+    const wokeAfter = all[0] ? (Date.parse(all[0].created_at) - lastEnd) / 1000 : NaN;
+    check("D3", results.length === 3 && all.length === 1 && wokeAfter >= -1 && wokeAfter <= 120 &&
       summary && (summary.content.match(/#comment-/g) || []).length >= 3 && all[0].trigger_comment_id === summary.id &&
       cs.some((c) => c.author_id === agentID(TL) && /收到\s*3/.test(c.content)),
-      `${results.length} result comments, TL runs=${all.length} (created ${all[0]?.created_at}, last instance ended ${new Date(lastEnd).toISOString()}), summary links=${(summary?.content.match(/#comment-/g) || []).length}, TL replied "收到 3"=${cs.some((c) => c.author_id === agentID(TL) && /收到\s*3/.test(c.content))}`);
+      `${results.length} result comments, TL runs=${all.length} queued ${wokeAfter}s after the last instance ended (limit 120s), summary links=${(summary?.content.match(/#comment-/g) || []).length}, TL replied "收到 3"=${cs.some((c) => c.author_id === agentID(TL) && /收到\s*3/.test(c.content))}`);
     const acts = json(["issue", "timeline", x.id, "--activity-only"]).filter((a) => a.actor_id === agentID(TB) &&
       ["status_changed", "assignee_changed"].includes(a.action));
     const now = json(["issue", "get", x.id]);
     check("D4", acts.length === 0 && now.status === "backlog" && now.assignee_id === agentID(TL) && !now.parent_issue_id,
       `TB status/assignee activities=${acts.length}, issue still backlog/TL/no parent`);
-    void tlRun;
   },
 
   async "d5-8"() {
@@ -155,7 +159,7 @@ const cases = {
       add(z, ["z1"]);
       // The first of X4/Z1 to start took the first freed slot; a second slot
       // freeing seconds later goes to the other one, which is fine.
-      const first = await waitFor("X4 or Z1 to start", SLEEP + 240, () => {
+      const first = await waitFor("X4 or Z1 to start", SLEEP + MODEL_SLACK, () => {
         const a = batches(x)[0].instances[0], b = batches(z)[0].instances[0];
         if (!a.started_at && !b.started_at) return null;
         return { x4: a, z1: b, winner: !b.started_at || (a.started_at && a.started_at < b.started_at) ? "X4" : "Z1" };
@@ -199,11 +203,11 @@ const cases = {
     add(x, ["p", "q", "r"]);
     await waitFor("3 running", 60, () => count(statusOf(x), "running") === 3);
     cancel(batches(x)[0].instances[1].task_id);
-    const done = await waitFor("1 and 3 end", SLEEP + 240, () => {
+    const done = await waitFor("1 and 3 end", SLEEP + MODEL_SLACK, () => {
       const s = statusOf(x);
       return s[0] === "completed" && s[2] === "completed" ? s : null;
     });
-    await waitFor("TL woken", 150, () => runs(x).find((r) => r.agent_id === agentID(TL)));
+    await waitFor("TL woken", 120, () => runs(x).find((r) => r.agent_id === agentID(TL)));
     await sleep(20);
     const tl = runs(x).filter((r) => r.agent_id === agentID(TL));
     const summary = comments(x).find((c) => c.author_type === "system" && c.content.startsWith("加开的"));
@@ -224,7 +228,7 @@ const cases = {
     log(`issue ${w.identifier} = W D12 (assigned to ${TB}, todo)`);
     await waitFor("main run", 60, () => runs(w).some((r) => r.status === "running"));
     cli(["issue", "comment", "add", w.id, "--content", `[@${TB}](mention://agent/${agentID(TB)}) 再跑一次`]);
-    await waitFor("both runs end", 2 * SLEEP + 300, () => {
+    await waitFor("both runs end", 2 * (SLEEP + MODEL_SLACK), () => {
       const r = runs(w).filter((v) => v.agent_id === agentID(TB));
       return r.length >= 2 && r.every((v) => ["completed", "failed", "cancelled"].includes(v.status)) ? r : null;
     });
@@ -237,12 +241,12 @@ const cases = {
     const x = newIssue("X D14");
     cli(["issue", "update", x.id, "--description", `加开：multica issue add-instances ${x.identifier} --agent ${TB} --split d --split e`]);
     cli(["issue", "status", x.id, "todo"]);
-    const b = await waitFor("TL batch", 240, () => batches(x)[0]);
-    const done = await waitFor("instances end", SLEEP + 300, () => {
+    const b = await waitFor("TL batch", MODEL_SLACK, () => batches(x)[0]);
+    const done = await waitFor("instances end", SLEEP + MODEL_SLACK, () => {
       const s = statusOf(x);
       return s.length === 2 && s.every((v) => v === "completed") ? s : null;
     });
-    const merge = await waitFor("TL woken by summary", 150, () => {
+    const merge = await waitFor("TL woken by summary", 120, () => {
       const summary = comments(x).find((c) => c.author_type === "system" && c.content.startsWith("加开的"));
       return summary && runs(x).find((r) => r.agent_id === agentID(TL) && r.trigger_comment_id === summary.id);
     });
@@ -254,7 +258,7 @@ const cases = {
     const x = newIssue("X D15");
     cli(["issue", "update", x.id, "--description", `加开：multica issue add-instances ${x.identifier} --agent ${TB} --split f --priority`]);
     cli(["issue", "status", x.id, "todo"]);
-    const reply = await waitFor("TL reports the error", 240, () =>
+    const reply = await waitFor("TL reports the error", MODEL_SLACK, () =>
       comments(x).find((c) => c.author_id === agentID(TL) && /priority_requires_member/.test(c.content)));
     await sleep(5);
     check("D15", reply && batches(x).length === 0 && !runs(x).some((r) => r.agent_id === agentID(TB)),
