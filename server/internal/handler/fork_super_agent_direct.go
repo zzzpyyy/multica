@@ -158,9 +158,13 @@ func (h *Handler) superSetStatus(ctx context.Context, task *db.AgentTaskQueue, s
 // super-agent. source_task_id is the chat turn, so runs it starts are
 // attributed to the user who sent that turn.
 func (h *Handler) createSuperAgentComment(ctx context.Context, issue db.Issue, sa db.Agent, sourceTask pgtype.UUID, content string) (db.Comment, error) {
+	return h.createSuperAgentCommentWithParent(ctx, issue, sa, sourceTask, pgtype.UUID{}, content)
+}
+
+func (h *Handler) createSuperAgentCommentWithParent(ctx context.Context, issue db.Issue, sa db.Agent, sourceTask, parent pgtype.UUID, content string) (db.Comment, error) {
 	created, err := h.Queries.CreateComment(ctx, db.CreateCommentParams{
 		ID: dbid.NewV7(), IssueID: issue.ID, WorkspaceID: issue.WorkspaceID,
-		AuthorType: "agent", AuthorID: sa.ID, Content: content, Type: "comment", SourceTaskID: sourceTask,
+		AuthorType: "agent", AuthorID: sa.ID, Content: content, Type: "comment", SourceTaskID: sourceTask, ParentID: parent,
 	})
 	if err != nil {
 		return db.Comment{}, err

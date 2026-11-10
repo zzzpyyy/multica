@@ -178,3 +178,48 @@ func TestSuperAgentForwardAndSetStatus(t *testing.T) {
 		t.Fatalf("status change actor = %s %s, want the super-agent (G4)", actorType, actorID)
 	}
 }
+
+// R2 / R7 / R12: an answer quotes the member's words under the question and
+// wakes the agent that asked; a source outside the tree turns into ask.
+func TestSuperAnswerOutcome(t *testing.T) {
+	fx, rt, sa := superAgentFixture(t)
+	ctx := context.Background()
+	asker := fx.Agent(t, "sa-asker", rt, testutil.Cols{"max_concurrent_tasks": 3})
+	t1 := fx.Issue(t, "sa T1")
+	k := fx.Issue(t, "sa K8", testutil.Cols{"parent_issue_id": t1, "assignee_type": "agent", "assignee_id": asker})
+	other := fx.Issue(t, "sa T2")
+	fx.Cleanup(t, `DELETE FROM agent_task_queue WHERE issue_id=$1`, k)
+	said := fx.Comment(t, t1, "fork 仓库放 GitHub")
+	notHere := fx.Comment(t, other, "放 iCode")
+
+	run := func(question, sources string) (string, string) {
+		t.Helper()
+		ask := fx.Comment(t, k, question, testutil.Cols{"author_type": "agent", "author_id": asker})
+		q := fx.Insert(t, "super_agent_question", testutil.Cols{"chat_session_id": sa.Session.ID, "comment_id": ask, "status": "answering"})
+		id := fx.Task(t, sa.ID, testutil.Cols{"runtime_id": rt, "issue_id": k, "status": "completed", "trigger_comment_id": ask,
+			"context": testutil.Raw(`jsonb_build_object('type','super_answer','question_id','` + q + `')`)})
+		task, err := testHandler.Queries.GetAgentTask(ctx, parseUUID(id))
+		if err != nil {
+			t.Fatal(err)
+		}
+		testHandler.runSuperAnswer(ctx, &task, "```super-action\n{\"type\":\"answer\",\"sources\":["+sources+"]}\n```")
+		var status string
+		fx.QueryRow(t, `SELECT status FROM super_agent_question WHERE id=$1`, q).Scan(&status)
+		return ask, status
+	}
+
+	ask, status := run("fork 仓库放 GitHub 还是 iCode？", `"c:`+said+`"`)
+	var content string
+	fx.QueryRow(t, `SELECT content FROM comment WHERE parent_id=$1 AND author_id=$2`, ask, sa.ID).Scan(&content)
+	if status != "answered" || !strings.Contains(content, "super-agent 引用") || !strings.Contains(content, "fork 仓库放 GitHub") || !strings.Contains(content, "#comment-"+said) {
+		t.Fatalf("answer: status %s, reply %q", status, content)
+	}
+	if n := fx.Count(t, `SELECT count(*) FROM agent_task_queue WHERE issue_id=$1 AND agent_id=$2`, k, asker); n != 1 {
+		t.Fatalf("asking agent runs after the answer = %d, want 1", n)
+	}
+
+	ask, status = run("仓库公开还是私有？", `"c:`+notHere+`"`)
+	if status != "asked" || fx.Count(t, `SELECT count(*) FROM comment WHERE parent_id=$1`, ask) != 0 {
+		t.Fatalf("out-of-tree source: status %s, replies %d", status, fx.Count(t, `SELECT count(*) FROM comment WHERE parent_id=$1`, ask))
+	}
+}

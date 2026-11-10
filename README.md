@@ -182,9 +182,11 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 | `server/internal/handler/chat.go` | super-agent 的会话不能新建第二段、归档、删除（409 `super_agent_session_locked`） | B1 |
 | `server/internal/handler/handler.go`、`issue.go`、`autopilot.go`、`squad.go`、`issue_wakeup.go`、`task_lifecycle.go` | 指派、自动化负责人、加小队成员、建唤醒规则、重跑碰到 super-agent 返回 400 `super_agent_not_assignable` | G4、G5 |
 | `server/internal/handler/comment.go`（`computeCommentAgentTriggers`） | 评论路由汇合处去掉 super-agent：@ 它、回复它的评论都照常发出，但不起运行 | G4、G5 |
-| `server/internal/handler/daemon.go`（super-agent） | 领取 super-agent 的任务要求 `multica-fork-v1`；清空工具相关字段、设 `no_tools`、用内置说明，对话轮次前面拼上服务端上下文；`CompleteTask` 提交后执行转达和改状态 | B1、B12、B19、G3、R1、R4–R6、R11 |
+| `server/internal/handler/daemon.go`（super-agent） | 领取 super-agent 的任务要求 `multica-fork-v1`；清空工具相关字段、设 `no_tools`、用内置说明，对话轮次前面拼上服务端上下文，代答轮次给 `server_prompt`；`CompleteTask` 提交后执行转达、改状态和代答结果 | B1、B12、B19、G3、R1、R4–R6、R11 |
 | `server/internal/service/task.go`（super-agent） | 触发器拒绝的入队当作"没有入队"；委派失败不交给 super-agent 接手；super-agent 的运行不补兜底评论；对话回复写入前剥掉 `super-action` 围栏，校验后和回复在同一个事务里写进 `super_agent_action` | B2–B11、B15–B18、D13、D16、G4、G5 |
 | `server/internal/daemon/daemon.go`、`prompt.go`、`types.go`（super-agent） | `no_tools` 的任务不合并本机 `~/.claude.json`、Remote MCP 和插件钩子，丢掉 `custom_args`，加 `--tools ""`；`server_prompt` 不为空时直接作为提示词 | B12、G3 |
+| `server/cmd/server/notification_listeners.go` | 智能体 @ 了开通 super-agent 的成员时，这条评论不进该成员的收件箱（`mentioned` 和订阅者的 `new_comment` 都不发），转给 super-agent 代答 | F3、R2 |
+| `server/cmd/server/main.go`（super-agent） | 注册推送和代答的监听、代答问题的 30 秒兜底扫描 | F1–F9、R2、R3、R7–R9、R12、G5 |
 | `server/internal/handler/agent.go`、`daemon.go` | 领取响应加 `instance` 字段；没声明 `multica-fork-v1` 的 daemon 领到实例行时，这次领取失败（`fork_daemon_required`） | D2、D3 |
 | `server/internal/handler/issue.go`、`issue_move.go` | 实例运行改状态、负责人、父任务时返回 403 `instance_run_readonly`（单个、批量、拖动三处） | D4 |
 | `server/internal/handler/comment.go` | 实例发的评论不走隐式兜底，不唤醒负责人或 leader | D3 |

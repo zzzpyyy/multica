@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package main
 
 import (
@@ -10,6 +12,7 @@ import (
 	"github.com/multica-ai/multica/server/internal/handler"
 	"github.com/multica-ai/multica/server/internal/inbox"
 	"github.com/multica-ai/multica/server/internal/issuestatus"
+	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 	"github.com/multica-ai/multica/server/pkg/dbid"
@@ -953,8 +956,15 @@ func registerNotificationListeners(bus *events.Bus, queries *db.Queries) {
 			})
 		}
 
+		// Fork (B rule 17, F3): an agent's @ of a member who uses the
+		// super-agent goes to the super-agent, not to that member's inbox.
+		routed := map[string]bool{}
+		for userID := range service.SuperAgentRoutedMembers(ctx, queries, parseUUID(commentID)) {
+			routed[userID] = true
+		}
+
 		notifySubscribers(ctx, queries, bus, issueID, issueStatus, e.WorkspaceID, e,
-			nil, "new_comment", "info",
+			routed, "new_comment", "info",
 			issueTitle, commentContent,
 			commentDetails)
 
@@ -962,6 +972,9 @@ func registerNotificationListeners(bus *events.Bus, queries *db.Queries) {
 		mentions := parseMentions(commentContent)
 		if len(mentions) > 0 {
 			skip := map[string]bool{e.ActorID: true}
+			for userID := range routed {
+				skip[userID] = true
+			}
 			notifyMentionedMembers(bus, queries, e, mentions, issueID, issueTitle, issueStatus,
 				issueTitle, skip, commentDetails)
 		}

@@ -4245,6 +4245,9 @@ func (h *Handler) buildClaimedTaskResponse(r *http.Request, task *db.AgentTaskQu
 	if resp.Agent != nil && h.isSuperAgentTask(r.Context(), task) { // Fork (B): last, after every tool-bearing field
 		stripSuperAgentTools(&resp)
 		h.prefixSuperAgentContext(r.Context(), task, &resp)
+		if failure := h.applySuperAnswerPrompt(r, task, &resp); failure != nil {
+			return resp, deliveredCommentIDs, issueSnapshot, agentSkillCount, builtinSkillCount, failure
+		}
 	}
 	return resp, deliveredCommentIDs, issueSnapshot, agentSkillCount, builtinSkillCount, nil
 }
@@ -4982,6 +4985,7 @@ func (h *Handler) CompleteTask(w http.ResponseWriter, r *http.Request) {
 	// mentions and recorded worker inputs; see reconcileCommentsOnCompletion.
 	h.reconcileCommentsOnCompletion(r.Context(), task)
 	h.runSuperAgentDirectActions(r.Context(), task) // Fork (B): forward / set_status after commit
+	h.runSuperAnswer(r.Context(), task, req.Output) // Fork (B): answer-on-your-behalf outcome
 	// The terminal transaction and completion reconciliation are committed.
 	// Wake the owning runtime now so queued work that was blocked by this
 	// task's agent capacity or serialization key is re-claimed immediately.

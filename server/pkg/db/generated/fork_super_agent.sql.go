@@ -49,6 +49,184 @@ func (q *Queries) CreateSuperAgentAction(ctx context.Context, arg CreateSuperAge
 	return i, err
 }
 
+const createSuperAgentPush = `-- name: CreateSuperAgentPush :one
+INSERT INTO super_agent_push (chat_session_id, chat_message_id, dedupe_key)
+VALUES ($1, $2, $3)
+ON CONFLICT (chat_session_id, dedupe_key) DO NOTHING
+RETURNING id, chat_session_id, chat_message_id, dedupe_key, created_at
+`
+
+type CreateSuperAgentPushParams struct {
+	ChatSessionID pgtype.UUID `json:"chat_session_id"`
+	ChatMessageID pgtype.UUID `json:"chat_message_id"`
+	DedupeKey     string      `json:"dedupe_key"`
+}
+
+// No row when this session already got this event (F8).
+func (q *Queries) CreateSuperAgentPush(ctx context.Context, arg CreateSuperAgentPushParams) (SuperAgentPush, error) {
+	row := q.db.QueryRow(ctx, createSuperAgentPush, arg.ChatSessionID, arg.ChatMessageID, arg.DedupeKey)
+	var i SuperAgentPush
+	err := row.Scan(
+		&i.ID,
+		&i.ChatSessionID,
+		&i.ChatMessageID,
+		&i.DedupeKey,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createSuperAgentQuestion = `-- name: CreateSuperAgentQuestion :one
+INSERT INTO super_agent_question (chat_session_id, comment_id, status)
+VALUES ($1, $2, $3)
+ON CONFLICT (chat_session_id, comment_id) DO NOTHING
+RETURNING id, chat_session_id, comment_id, status, task_id, created_at
+`
+
+type CreateSuperAgentQuestionParams struct {
+	ChatSessionID pgtype.UUID `json:"chat_session_id"`
+	CommentID     pgtype.UUID `json:"comment_id"`
+	Status        string      `json:"status"`
+}
+
+// No row when this comment is already handled in the session.
+func (q *Queries) CreateSuperAgentQuestion(ctx context.Context, arg CreateSuperAgentQuestionParams) (SuperAgentQuestion, error) {
+	row := q.db.QueryRow(ctx, createSuperAgentQuestion, arg.ChatSessionID, arg.CommentID, arg.Status)
+	var i SuperAgentQuestion
+	err := row.Scan(
+		&i.ID,
+		&i.ChatSessionID,
+		&i.CommentID,
+		&i.Status,
+		&i.TaskID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createSuperAnswerTask = `-- name: CreateSuperAnswerTask :one
+INSERT INTO agent_task_queue (
+    agent_id, runtime_id, issue_id, status, priority, trigger_comment_id, force_fresh_session, context,
+    originator_user_id, accountable_user_id, originator_source, delegated_from_task_id,
+    rule_version_id, trigger_evidence_kind, trigger_evidence_ref_id, id
+)
+SELECT
+    $1, $2, $3, 'queued', 2, $4, TRUE,
+    jsonb_build_object('type', 'super_answer', 'question_id', $5::text),
+    $6, $7, $8,
+    $9, $10,
+    $11, $12, $13
+WHERE lock_task_owner_rows($1, $3, $2)
+ON CONFLICT (issue_id, agent_id, (COALESCE(comment_thread_id, '00000000-0000-0000-0000-000000000000'::uuid))) WHERE (status IN ('queued', 'dispatched')
+       OR (status = 'deferred' AND context->>'channel_issue_media_pending' = 'true'))
+      AND batch_id IS NULL
+DO NOTHING
+RETURNING id, agent_id, issue_id, status, priority, dispatched_at, started_at, completed_at, result, error, created_at, context, runtime_id, session_id, work_dir, trigger_comment_id, chat_session_id, autopilot_run_id, attempt, max_attempts, parent_task_id, failure_reason, trigger_summary, force_fresh_session, is_leader_task, wait_reason, initiator_user_id, handoff_note, prepare_lease_expires_at, squad_id, runtime_mcp_overlay, escalation_for_task_id, fire_at, originator_user_id, runtime_connected_apps, coalesced_comment_ids, delivered_comment_ids, chat_input_task_id, chat_finalize_deferred_at, originator_source, delegated_from_task_id, retry_of_task_id, rerun_of_task_id, rule_version_id, trigger_evidence_kind, trigger_evidence_ref_id, accountable_user_id, session_rollout_missing, retired_session_id, quick_actions_disabled, regenerate_quick_actions_for, branch_name, durable_work_dir, channel_context_revision, comment_thread_id, cancelled_by_type, cancelled_by_id, cancelled_by_name, issue_snapshot, workflow_step, batch_id, batch_index
+`
+
+type CreateSuperAnswerTaskParams struct {
+	AgentID              pgtype.UUID `json:"agent_id"`
+	RuntimeID            pgtype.UUID `json:"runtime_id"`
+	IssueID              pgtype.UUID `json:"issue_id"`
+	TriggerCommentID     pgtype.UUID `json:"trigger_comment_id"`
+	QuestionID           string      `json:"question_id"`
+	OriginatorUserID     pgtype.UUID `json:"originator_user_id"`
+	AccountableUserID    pgtype.UUID `json:"accountable_user_id"`
+	OriginatorSource     pgtype.Text `json:"originator_source"`
+	DelegatedFromTaskID  pgtype.UUID `json:"delegated_from_task_id"`
+	RuleVersionID        pgtype.UUID `json:"rule_version_id"`
+	TriggerEvidenceKind  pgtype.Text `json:"trigger_evidence_kind"`
+	TriggerEvidenceRefID pgtype.UUID `json:"trigger_evidence_ref_id"`
+	ID                   pgtype.UUID `json:"id"`
+}
+
+// The super-agent's answer-on-your-behalf run for one question (rule 17-20).
+// Fresh session; context.type lets fork_super_agent_run_guard admit it. A
+// pending run in the same thread wins: no row, the sweep retries later.
+func (q *Queries) CreateSuperAnswerTask(ctx context.Context, arg CreateSuperAnswerTaskParams) (AgentTaskQueue, error) {
+	row := q.db.QueryRow(ctx, createSuperAnswerTask,
+		arg.AgentID,
+		arg.RuntimeID,
+		arg.IssueID,
+		arg.TriggerCommentID,
+		arg.QuestionID,
+		arg.OriginatorUserID,
+		arg.AccountableUserID,
+		arg.OriginatorSource,
+		arg.DelegatedFromTaskID,
+		arg.RuleVersionID,
+		arg.TriggerEvidenceKind,
+		arg.TriggerEvidenceRefID,
+		arg.ID,
+	)
+	var i AgentTaskQueue
+	err := row.Scan(
+		&i.ID,
+		&i.AgentID,
+		&i.IssueID,
+		&i.Status,
+		&i.Priority,
+		&i.DispatchedAt,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.Result,
+		&i.Error,
+		&i.CreatedAt,
+		&i.Context,
+		&i.RuntimeID,
+		&i.SessionID,
+		&i.WorkDir,
+		&i.TriggerCommentID,
+		&i.ChatSessionID,
+		&i.AutopilotRunID,
+		&i.Attempt,
+		&i.MaxAttempts,
+		&i.ParentTaskID,
+		&i.FailureReason,
+		&i.TriggerSummary,
+		&i.ForceFreshSession,
+		&i.IsLeaderTask,
+		&i.WaitReason,
+		&i.InitiatorUserID,
+		&i.HandoffNote,
+		&i.PrepareLeaseExpiresAt,
+		&i.SquadID,
+		&i.RuntimeMcpOverlay,
+		&i.EscalationForTaskID,
+		&i.FireAt,
+		&i.OriginatorUserID,
+		&i.RuntimeConnectedApps,
+		&i.CoalescedCommentIds,
+		&i.DeliveredCommentIds,
+		&i.ChatInputTaskID,
+		&i.ChatFinalizeDeferredAt,
+		&i.OriginatorSource,
+		&i.DelegatedFromTaskID,
+		&i.RetryOfTaskID,
+		&i.RerunOfTaskID,
+		&i.RuleVersionID,
+		&i.TriggerEvidenceKind,
+		&i.TriggerEvidenceRefID,
+		&i.AccountableUserID,
+		&i.SessionRolloutMissing,
+		&i.RetiredSessionID,
+		&i.QuickActionsDisabled,
+		&i.RegenerateQuickActionsFor,
+		&i.BranchName,
+		&i.DurableWorkDir,
+		&i.ChannelContextRevision,
+		&i.CommentThreadID,
+		&i.CancelledByType,
+		&i.CancelledByID,
+		&i.CancelledByName,
+		&i.IssueSnapshot,
+		&i.WorkflowStep,
+		&i.BatchID,
+		&i.BatchIndex,
+	)
+	return i, err
+}
+
 const expirePendingSuperAgentCards = `-- name: ExpirePendingSuperAgentCards :exec
 UPDATE super_agent_action SET status = 'expired'
 WHERE chat_session_id = $1 AND status = 'pending'
@@ -114,6 +292,24 @@ func (q *Queries) GetSuperAgentAction(ctx context.Context, id pgtype.UUID) (Supe
 	return i, err
 }
 
+const getSuperAgentQuestion = `-- name: GetSuperAgentQuestion :one
+SELECT id, chat_session_id, comment_id, status, task_id, created_at FROM super_agent_question WHERE id = $1
+`
+
+func (q *Queries) GetSuperAgentQuestion(ctx context.Context, id pgtype.UUID) (SuperAgentQuestion, error) {
+	row := q.db.QueryRow(ctx, getSuperAgentQuestion, id)
+	var i SuperAgentQuestion
+	err := row.Scan(
+		&i.ID,
+		&i.ChatSessionID,
+		&i.CommentID,
+		&i.Status,
+		&i.TaskID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getSuperAgentSessionForMember = `-- name: GetSuperAgentSessionForMember :one
 SELECT s.id, s.workspace_id, s.agent_id, s.creator_id, s.title, s.session_id, s.work_dir, s.status, s.created_at, s.updated_at, s.unread_since, s.runtime_id, s.last_read_at, s.is_agent_intro, s.pinned_at, s.project_id, s.explicitly_created_at FROM chat_session s
 JOIN agent a ON a.id = s.agent_id
@@ -151,6 +347,126 @@ func (q *Queries) GetSuperAgentSessionForMember(ctx context.Context, arg GetSupe
 		&i.ExplicitlyCreatedAt,
 	)
 	return i, err
+}
+
+const listChildIssueStatuses = `-- name: ListChildIssueStatuses :many
+SELECT id, status, stage FROM issue
+WHERE parent_issue_id = $1 AND workspace_id = $2
+`
+
+type ListChildIssueStatusesParams struct {
+	ParentIssueID pgtype.UUID `json:"parent_issue_id"`
+	WorkspaceID   pgtype.UUID `json:"workspace_id"`
+}
+
+type ListChildIssueStatusesRow struct {
+	ID     pgtype.UUID `json:"id"`
+	Status string      `json:"status"`
+	Stage  pgtype.Int4 `json:"stage"`
+}
+
+func (q *Queries) ListChildIssueStatuses(ctx context.Context, arg ListChildIssueStatusesParams) ([]ListChildIssueStatusesRow, error) {
+	rows, err := q.db.Query(ctx, listChildIssueStatuses, arg.ParentIssueID, arg.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListChildIssueStatusesRow{}
+	for rows.Next() {
+		var i ListChildIssueStatusesRow
+		if err := rows.Scan(&i.ID, &i.Status, &i.Stage); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listIssueTreeIDs = `-- name: ListIssueTreeIDs :many
+WITH RECURSIVE up AS (
+    SELECT i.id, i.parent_issue_id, 0 AS depth FROM issue i WHERE i.id = $1
+    UNION ALL
+    SELECT p.id, p.parent_issue_id, up.depth + 1 FROM issue p JOIN up ON p.id = up.parent_issue_id
+    WHERE up.depth < 32
+), root AS (
+    SELECT id FROM up ORDER BY depth DESC LIMIT 1
+), down AS (
+    SELECT i.id, 0 AS depth FROM issue i WHERE i.id = (SELECT id FROM root)
+    UNION ALL
+    SELECT c.id, down.depth + 1 FROM issue c JOIN down ON c.parent_issue_id = down.id
+    WHERE down.depth < 32
+)
+SELECT DISTINCT id FROM down
+`
+
+// Every issue in the tree the given issue belongs to: up to its top-level
+// issue, then down (rule 18).
+func (q *Queries) ListIssueTreeIDs(ctx context.Context, issueID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listIssueTreeIDs, issueID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMemberCommentsInIssues = `-- name: ListMemberCommentsInIssues :many
+SELECT id, issue_id, content, created_at FROM comment
+WHERE author_type = 'member' AND author_id = $1
+  AND issue_id = ANY($2::uuid[]) AND deleted_at IS NULL
+ORDER BY created_at DESC
+LIMIT 200
+`
+
+type ListMemberCommentsInIssuesParams struct {
+	AuthorID pgtype.UUID   `json:"author_id"`
+	IssueIds []pgtype.UUID `json:"issue_ids"`
+}
+
+type ListMemberCommentsInIssuesRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	IssueID   pgtype.UUID        `json:"issue_id"`
+	Content   string             `json:"content"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListMemberCommentsInIssues(ctx context.Context, arg ListMemberCommentsInIssuesParams) ([]ListMemberCommentsInIssuesRow, error) {
+	rows, err := q.db.Query(ctx, listMemberCommentsInIssues, arg.AuthorID, arg.IssueIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMemberCommentsInIssuesRow{}
+	for rows.Next() {
+		var i ListMemberCommentsInIssuesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.IssueID,
+			&i.Content,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listPendingSuperAgentActions = `-- name: ListPendingSuperAgentActions :many
@@ -260,6 +576,61 @@ func (q *Queries) ListRecentSuperAgentPushes(ctx context.Context, chatSessionID 
 	return items, nil
 }
 
+const listStuckSuperAgentQuestions = `-- name: ListStuckSuperAgentQuestions :many
+SELECT q.id, q.chat_session_id, q.comment_id, q.status, q.task_id, q.created_at,
+       (SELECT count(*) FROM agent_task_queue t WHERE t.context->>'question_id' = q.id::text)::int AS attempts
+FROM super_agent_question q
+WHERE q.status = 'answering'
+  AND q.created_at < now() - interval '1 minute'
+  AND NOT EXISTS (
+      SELECT 1 FROM agent_task_queue t
+      WHERE t.context->>'question_id' = q.id::text
+        AND t.status IN ('queued', 'dispatched', 'running', 'waiting_local_directory', 'deferred')
+  )
+ORDER BY q.created_at ASC
+LIMIT 50
+`
+
+type ListStuckSuperAgentQuestionsRow struct {
+	ID            pgtype.UUID        `json:"id"`
+	ChatSessionID pgtype.UUID        `json:"chat_session_id"`
+	CommentID     pgtype.UUID        `json:"comment_id"`
+	Status        string             `json:"status"`
+	TaskID        pgtype.UUID        `json:"task_id"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	Attempts      int32              `json:"attempts"`
+}
+
+// Answering for over a minute with no run in flight: the enqueue lost a
+// race, the event was lost, or the run ended without an outcome.
+func (q *Queries) ListStuckSuperAgentQuestions(ctx context.Context) ([]ListStuckSuperAgentQuestionsRow, error) {
+	rows, err := q.db.Query(ctx, listStuckSuperAgentQuestions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListStuckSuperAgentQuestionsRow{}
+	for rows.Next() {
+		var i ListStuckSuperAgentQuestionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatSessionID,
+			&i.CommentID,
+			&i.Status,
+			&i.TaskID,
+			&i.CreatedAt,
+			&i.Attempts,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSuperAgentCards = `-- name: ListSuperAgentCards :many
 SELECT id, chat_session_id, chat_message_id, kind, payload, status, result, created_at FROM super_agent_action
 WHERE chat_session_id = $1 AND kind IN ('create_issues', 'add_instances')
@@ -285,6 +656,41 @@ func (q *Queries) ListSuperAgentCards(ctx context.Context, chatSessionID pgtype.
 			&i.Result,
 			&i.CreatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSuperAgentMessageIssueLinks = `-- name: ListSuperAgentMessageIssueLinks :many
+SELECT kind, payload, result FROM super_agent_action
+WHERE chat_session_id = $1
+  AND ((kind = 'forward' AND status = 'done') OR (kind = 'create_issues' AND status IN ('created', 'failed')))
+`
+
+type ListSuperAgentMessageIssueLinksRow struct {
+	Kind    string `json:"kind"`
+	Payload []byte `json:"payload"`
+	Result  []byte `json:"result"`
+}
+
+// Which issue each forwarded or task-creating action tied the user's messages
+// to (rule 18: a message belongs to the issue it was forwarded to or written
+// into).
+func (q *Queries) ListSuperAgentMessageIssueLinks(ctx context.Context, chatSessionID pgtype.UUID) ([]ListSuperAgentMessageIssueLinksRow, error) {
+	rows, err := q.db.Query(ctx, listSuperAgentMessageIssueLinks, chatSessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSuperAgentMessageIssueLinksRow{}
+	for rows.Next() {
+		var i ListSuperAgentMessageIssueLinksRow
+		if err := rows.Scan(&i.Kind, &i.Payload, &i.Result); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -347,6 +753,86 @@ func (q *Queries) ListSuperAgentQuestionsByStatus(ctx context.Context, arg ListS
 	return items, nil
 }
 
+const listSuperAgentSessionsInWorkspace = `-- name: ListSuperAgentSessionsInWorkspace :many
+SELECT DISTINCT ON (s.creator_id) s.id, s.workspace_id, s.agent_id, s.creator_id, s.title, s.session_id, s.work_dir, s.status, s.created_at, s.updated_at, s.unread_since, s.runtime_id, s.last_read_at, s.is_agent_intro, s.pinned_at, s.project_id, s.explicitly_created_at
+FROM chat_session s
+JOIN agent a ON a.id = s.agent_id
+WHERE s.workspace_id = $1 AND a.system_key = 'super'
+ORDER BY s.creator_id, s.created_at ASC
+`
+
+// One super-agent session per member who has opened it (rule 1).
+func (q *Queries) ListSuperAgentSessionsInWorkspace(ctx context.Context, workspaceID pgtype.UUID) ([]ChatSession, error) {
+	rows, err := q.db.Query(ctx, listSuperAgentSessionsInWorkspace, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ChatSession{}
+	for rows.Next() {
+		var i ChatSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkspaceID,
+			&i.AgentID,
+			&i.CreatorID,
+			&i.Title,
+			&i.SessionID,
+			&i.WorkDir,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.UnreadSince,
+			&i.RuntimeID,
+			&i.LastReadAt,
+			&i.IsAgentIntro,
+			&i.PinnedAt,
+			&i.ProjectID,
+			&i.ExplicitlyCreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserMessagesInSession = `-- name: ListUserMessagesInSession :many
+SELECT id, content, created_at FROM chat_message
+WHERE chat_session_id = $1 AND role = 'user'
+ORDER BY created_at DESC
+LIMIT 500
+`
+
+type ListUserMessagesInSessionRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	Content   string             `json:"content"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListUserMessagesInSession(ctx context.Context, chatSessionID pgtype.UUID) ([]ListUserMessagesInSessionRow, error) {
+	rows, err := q.db.Query(ctx, listUserMessagesInSession, chatSessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUserMessagesInSessionRow{}
+	for rows.Next() {
+		var i ListUserMessagesInSessionRow
+		if err := rows.Scan(&i.ID, &i.Content, &i.CreatedAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markSuperAgentQuestionsForwarded = `-- name: MarkSuperAgentQuestionsForwarded :exec
 UPDATE super_agent_question q SET status = 'forwarded'
 FROM comment c
@@ -361,6 +847,47 @@ type MarkSuperAgentQuestionsForwardedParams struct {
 
 func (q *Queries) MarkSuperAgentQuestionsForwarded(ctx context.Context, arg MarkSuperAgentQuestionsForwardedParams) error {
 	_, err := q.db.Exec(ctx, markSuperAgentQuestionsForwarded, arg.ChatSessionID, arg.IssueID)
+	return err
+}
+
+const setSuperAgentQuestionStatus = `-- name: SetSuperAgentQuestionStatus :one
+UPDATE super_agent_question SET status = $1
+WHERE id = $2 AND status = 'answering'
+RETURNING id, chat_session_id, comment_id, status, task_id, created_at
+`
+
+type SetSuperAgentQuestionStatusParams struct {
+	Status string      `json:"status"`
+	ID     pgtype.UUID `json:"id"`
+}
+
+// Only an answering question moves on, so a late or replayed outcome cannot
+// reopen one that was already answered or asked.
+func (q *Queries) SetSuperAgentQuestionStatus(ctx context.Context, arg SetSuperAgentQuestionStatusParams) (SuperAgentQuestion, error) {
+	row := q.db.QueryRow(ctx, setSuperAgentQuestionStatus, arg.Status, arg.ID)
+	var i SuperAgentQuestion
+	err := row.Scan(
+		&i.ID,
+		&i.ChatSessionID,
+		&i.CommentID,
+		&i.Status,
+		&i.TaskID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const setSuperAgentQuestionTask = `-- name: SetSuperAgentQuestionTask :exec
+UPDATE super_agent_question SET task_id = $1 WHERE id = $2
+`
+
+type SetSuperAgentQuestionTaskParams struct {
+	TaskID pgtype.UUID `json:"task_id"`
+	ID     pgtype.UUID `json:"id"`
+}
+
+func (q *Queries) SetSuperAgentQuestionTask(ctx context.Context, arg SetSuperAgentQuestionTaskParams) error {
+	_, err := q.db.Exec(ctx, setSuperAgentQuestionTask, arg.TaskID, arg.ID)
 	return err
 }
 

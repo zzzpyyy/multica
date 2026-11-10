@@ -733,6 +733,7 @@ func main() {
 	taskSvc, autopilotSvc := backgroundServices(h)
 	registerAutopilotListeners(bus, autopilotSvc)
 	registerForkInstanceListeners(bus, taskSvc) // Fork (D)
+	registerForkSuperAgentListeners(bus, taskSvc) // Fork (B)
 
 	// Construct a LivenessStore that mirrors the one wired into the HTTP
 	// handler. Both the heartbeat write path (handler) and the sweeper read
@@ -856,6 +857,9 @@ func main() {
 	}
 	if err := schedulerMgr.Register(scheduler.InstanceBatchSettleSweepJob(taskSvc)); err != nil { // Fork (D)
 		slog.Error("scheduler: register instance batch settle sweep", "error", err)
+	}
+	if err := schedulerMgr.Register(scheduler.SuperAgentQuestionSweepJob(taskSvc)); err != nil { // Fork (B)
+		slog.Error("scheduler: register super-agent question sweep", "error", err)
 	}
 	if err := schedulerMgr.Register(scheduler.AutopilotScheduleDispatchJob(pool, queries, autopilotSvc)); err != nil {
 		slog.Warn("scheduler: failed to register autopilot_schedule_dispatch job", "error", err)
