@@ -1,10 +1,10 @@
+# Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 name: CI
 
 on:
+  # The fork runs CI on every push to any branch (G7/G8 checks included).
   push:
-    branches: [main]
   pull_request:
-    branches: [main]
   schedule:
     - cron: "23 3 * * *"
   workflow_dispatch:
@@ -14,6 +14,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Fork-only: public-repo hygiene (G7) and modified-file headers (G8).
+  # Runs on every push regardless of path filters.
+  fork-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Self-test the fork checks
+        run: bash scripts/fork/check.test.sh
+
+      - name: No internal data in the fork's commits (G7)
+        run: bash scripts/fork/check-public.sh HEAD
+
+      - name: Modified upstream files are marked (G8)
+        run: bash scripts/fork/check-modified-headers.sh HEAD
+
   # PRs and main pushes use the same paths. Scheduled/manual runs validate all
   # scopes, including platform stress tests, without charging every merge for them.
   changes:

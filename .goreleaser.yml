@@ -1,3 +1,4 @@
+# Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 version: 2
 
 project_name: multica
@@ -7,6 +8,12 @@ release:
   # replace only the matching CLI artifact and retry the upload; unrelated
   # release assets (for example manually published macOS builds) stay intact.
   replace_existing_artifacts: true
+  # A `-fork.N` tag looks like a semver prerelease. It must still be the
+  # latest normal release, or releases/latest (CLI update, install scripts,
+  # desktop CLI bootstrap) cannot find it. CI publishes with `gh release`
+  # (see release.yml); these keep a local `goreleaser release` equivalent.
+  prerelease: false
+  make_latest: true
 
 builds:
   - id: multica
@@ -70,23 +77,3 @@ changelog:
       - "^docs:"
       - "^test:"
       - "^chore:"
-
-brews:
-  - name: multica
-    ids:
-      - versioned
-    repository:
-      owner: multica-ai
-      name: homebrew-tap
-      branch: main
-      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    directory: Formula
-    homepage: "https://github.com/multica-ai/multica"
-    description: "Multica CLI — local agent runtime and management tool for the Multica platform"
-    # No license stanza: Multica ships under the Multica License (Apache 2.0
-    # terms with additional conditions, see LICENSE), which has no SPDX
-    # identifier, so declaring "Apache-2.0" here would be a false claim.
-    install: |
-      bin.install "multica"
-    test: |
-      system "#{bin}/multica", "version"
