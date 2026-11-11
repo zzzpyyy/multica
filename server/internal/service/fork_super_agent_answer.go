@@ -153,13 +153,14 @@ func (s *TaskService) SuperAnswerQuestion(ctx context.Context, task db.AgentTask
 }
 
 // askUser hands an answering question to the member: status asked plus a
-// push (rule 19). A question already settled is left alone.
-func (s *TaskService) askUser(ctx context.Context, questionID pgtype.UUID) {
+// push (rule 19). A question already settled is left alone (false).
+func (s *TaskService) askUser(ctx context.Context, questionID pgtype.UUID) bool {
 	q, err := s.Queries.SetSuperAgentQuestionStatus(ctx, db.SetSuperAgentQuestionStatusParams{ID: questionID, Status: "asked"})
 	if err != nil {
-		return
+		return false
 	}
 	s.pushQuestion(ctx, q)
+	return true
 }
 
 func (s *TaskService) pushQuestion(ctx context.Context, q db.SuperAgentQuestion) {
@@ -196,7 +197,9 @@ func (s *TaskService) PushQuestion(ctx context.Context, q db.SuperAgentQuestion)
 }
 
 // SweepSuperAgentQuestions re-enqueues questions whose answer run never
-// started or vanished, and after three attempts asks the member (rule 20).
+// started or vanished, and after three attempts asks the member. An overdue
+// question is asked at once and its run cancelled; the run's late outcome
+// finds the question settled and writes nothing (rule 20).
 func (s *TaskService) SweepSuperAgentQuestions(ctx context.Context) error {
 	rows, err := s.Queries.ListStuckSuperAgentQuestions(ctx)
 	if err != nil {
@@ -204,6 +207,13 @@ func (s *TaskService) SweepSuperAgentQuestions(ctx context.Context) error {
 	}
 	for _, r := range rows {
 		q := db.SuperAgentQuestion{ID: r.ID, ChatSessionID: r.ChatSessionID, CommentID: r.CommentID, Status: r.Status, TaskID: r.TaskID, CreatedAt: r.CreatedAt}
+		if r.Overdue {
+			if s.askUser(ctx, q.ID) && q.TaskID.Valid {
+				// Best effort: a run that already ended is not cancellable.
+				_, _ = s.CancelTaskWithReason(ctx, q.TaskID, "Answer run passed the 4-minute limit; the question was pushed to the conversation.", "super_answer_timeout")
+			}
+			continue
+		}
 		if r.Attempts >= 3 {
 			s.askUser(ctx, q.ID)
 			continue

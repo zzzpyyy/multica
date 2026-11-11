@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/multica-ai/multica/server/internal/events"
 	"github.com/multica-ai/multica/server/internal/testutil"
@@ -221,5 +222,73 @@ func TestSuperAnswerOutcome(t *testing.T) {
 	ask, status = run("仓库公开还是私有？", `"c:`+notHere+`"`)
 	if status != "asked" || fx.Count(t, `SELECT count(*) FROM comment WHERE parent_id=$1`, ask) != 0 {
 		t.Fatalf("out-of-tree source: status %s, replies %d", status, fx.Count(t, `SELECT count(*) FROM comment WHERE parent_id=$1`, ask))
+	}
+}
+
+// Rule 20: a question still answering after 4 minutes is pushed even while
+// its answer run is still running (retrying, stuck); the run is cancelled,
+// and an answer it returns afterwards writes nothing.
+func TestOverdueQuestionPushedWhileRunStillRunning(t *testing.T) {
+	fx, rt, sa := superAgentFixture(t)
+	ctx := context.Background()
+	asker := fx.Agent(t, "sa-slow-asker", rt)
+	t1 := fx.Issue(t, "sa slow T1")
+	k := fx.Issue(t, "sa slow K", testutil.Cols{"parent_issue_id": t1, "assignee_type": "agent", "assignee_id": asker})
+	fx.Cleanup(t, `DELETE FROM agent_task_queue WHERE issue_id=$1`, k)
+	fx.Cleanup(t, `DELETE FROM super_agent_push WHERE chat_session_id=$1`, sa.Session.ID)
+	said := fx.Comment(t, t1, "用 v2")
+	ask := fx.Comment(t, k, "接口用 v1 还是 v2？", testutil.Cols{"author_type": "agent", "author_id": asker})
+	q := fx.Insert(t, "super_agent_question", testutil.Cols{"chat_session_id": sa.Session.ID, "comment_id": ask, "status": "answering",
+		"created_at": testutil.Raw(`now() - interval '4 minutes 10 seconds'`)})
+	fx.Cleanup(t, `DELETE FROM super_agent_question WHERE id=$1`, q)
+	id := fx.Task(t, sa.ID, testutil.Cols{"runtime_id": rt, "issue_id": k, "status": "running", "started_at": time.Now(), "trigger_comment_id": ask,
+		"context": testutil.Raw(`jsonb_build_object('type','super_answer','question_id','` + q + `')`)})
+	fx.Exec(t, `UPDATE super_agent_question SET task_id=$2 WHERE id=$1`, q, id)
+
+	if err := testHandler.TaskService.SweepSuperAgentQuestions(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var status, taskStatus string
+	fx.QueryRow(t, `SELECT status FROM super_agent_question WHERE id=$1`, q).Scan(&status)
+	fx.QueryRow(t, `SELECT status FROM agent_task_queue WHERE id=$1`, id).Scan(&taskStatus)
+	if status != "asked" || taskStatus != "cancelled" {
+		t.Fatalf("after the sweep: question %s, run %s; want asked, cancelled", status, taskStatus)
+	}
+	if n := fx.Count(t, `SELECT count(*) FROM chat_message WHERE chat_session_id=$1 AND task_id IS NULL AND content LIKE '%接口用 v1 还是 v2%'`, sa.Session.ID); n != 1 {
+		t.Fatalf("question pushes = %d, want 1", n)
+	}
+
+	// The run comes back late with an answer: one outcome per question.
+	task, err := testHandler.Queries.GetAgentTask(ctx, parseUUID(id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	testHandler.runSuperAnswer(ctx, &task, "```super-action\n{\"type\":\"answer\",\"sources\":[\"c:"+said+"\"]}\n```")
+	if n := fx.Count(t, `SELECT count(*) FROM comment WHERE parent_id=$1`, ask); n != 0 {
+		t.Fatalf("late answer wrote %d replies", n)
+	}
+	if err := testHandler.TaskService.SweepSuperAgentQuestions(ctx); err != nil { // a second sweep pushes nothing new
+		t.Fatal(err)
+	}
+	if n := fx.Count(t, `SELECT count(*) FROM chat_message WHERE chat_session_id=$1 AND task_id IS NULL AND content LIKE '%接口用 v1 还是 v2%'`, sa.Session.ID); n != 1 {
+		t.Fatalf("question pushes after a second sweep = %d, want 1", n)
+	}
+
+	// Never claimed (daemon offline, no free slot): pushed the same way.
+	ask2 := fx.Comment(t, k, "要不要支持分页？", testutil.Cols{"author_type": "agent", "author_id": asker})
+	q2 := fx.Insert(t, "super_agent_question", testutil.Cols{"chat_session_id": sa.Session.ID, "comment_id": ask2, "status": "answering",
+		"created_at": testutil.Raw(`now() - interval '4 minutes 10 seconds'`)})
+	fx.Cleanup(t, `DELETE FROM super_agent_question WHERE id=$1`, q2)
+	id2 := fx.Task(t, sa.ID, testutil.Cols{"runtime_id": rt, "issue_id": k, "status": "queued", "trigger_comment_id": ask2,
+		"context": testutil.Raw(`jsonb_build_object('type','super_answer','question_id','` + q2 + `')`)})
+	fx.Exec(t, `UPDATE super_agent_question SET task_id=$2 WHERE id=$1`, q2, id2)
+	if err := testHandler.TaskService.SweepSuperAgentQuestions(ctx); err != nil {
+		t.Fatal(err)
+	}
+	fx.QueryRow(t, `SELECT status FROM super_agent_question WHERE id=$1`, q2).Scan(&status)
+	fx.QueryRow(t, `SELECT status FROM agent_task_queue WHERE id=$1`, id2).Scan(&taskStatus)
+	if status != "asked" || taskStatus != "cancelled" ||
+		fx.Count(t, `SELECT count(*) FROM chat_message WHERE chat_session_id=$1 AND task_id IS NULL AND content LIKE '%要不要支持分页%'`, sa.Session.ID) != 1 {
+		t.Fatalf("queued answer run: question %s, run %s", status, taskStatus)
 	}
 }

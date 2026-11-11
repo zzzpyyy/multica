@@ -135,17 +135,20 @@ RETURNING *;
 
 -- name: ListStuckSuperAgentQuestions :many
 -- Answering for over a minute with no run in flight: the enqueue lost a
--- race, the event was lost, or the run ended without an outcome.
+-- race, the event was lost, or the run ended without an outcome. Answering
+-- for over 4 minutes is overdue whatever its run is doing (retrying, stuck,
+-- never claimed): with the 30 s sweep it is pushed within rule 20's 5.
 SELECT q.*,
-       (SELECT count(*) FROM agent_task_queue t WHERE t.context->>'question_id' = q.id::text)::int AS attempts
+       (SELECT count(*) FROM agent_task_queue t WHERE t.context->>'question_id' = q.id::text)::int AS attempts,
+       (q.created_at < now() - interval '4 minutes')::bool AS overdue
 FROM super_agent_question q
 WHERE q.status = 'answering'
   AND q.created_at < now() - interval '1 minute'
-  AND NOT EXISTS (
+  AND (q.created_at < now() - interval '4 minutes' OR NOT EXISTS (
       SELECT 1 FROM agent_task_queue t
       WHERE t.context->>'question_id' = q.id::text
         AND t.status IN ('queued', 'dispatched', 'running', 'waiting_local_directory', 'deferred')
-  )
+  ))
 ORDER BY q.created_at ASC
 LIMIT 50;
 
