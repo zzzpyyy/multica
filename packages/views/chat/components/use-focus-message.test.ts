@@ -20,7 +20,7 @@ describe("useFocusMessage (F7, B18)", () => {
   it("scrolls to a loaded message once and highlights it", () => {
     const props = base({ index: 7 });
     const { result, rerender } = renderHook((p: Props) => useFocusMessage(p), { initialProps: props });
-    expect(props.scrollTo).toHaveBeenCalledWith(7);
+    expect(props.scrollTo).toHaveBeenCalledWith(7, "m-1");
     expect(result.current).toBe("m-1");
     rerender({ ...props, index: 9 });
     expect(props.scrollTo).toHaveBeenCalledTimes(1);
@@ -31,7 +31,7 @@ describe("useFocusMessage (F7, B18)", () => {
     const { rerender } = renderHook((p: Props) => useFocusMessage(p), { initialProps: props });
     expect(props.scrollTo).not.toHaveBeenCalled();
     rerender({ ...props, ready: true });
-    expect(props.scrollTo).toHaveBeenCalledWith(3);
+    expect(props.scrollTo).toHaveBeenCalledWith(3, "m-1");
   });
 
   it("walks older pages until the message loads", () => {
@@ -45,7 +45,7 @@ describe("useFocusMessage (F7, B18)", () => {
     rerender({ ...props });
     expect(props.loadOlder).toHaveBeenCalledTimes(1);
     rerender({ ...props, loadedCount: 100, index: 0 });
-    expect(props.scrollTo).toHaveBeenCalledWith(0);
+    expect(props.scrollTo).toHaveBeenCalledWith(0, "m-1");
     expect(props.onMissing).not.toHaveBeenCalled();
   });
 

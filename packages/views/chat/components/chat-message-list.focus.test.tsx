@@ -58,7 +58,7 @@ afterEach(() => {
 
 describe("ChatMessageList ?message= focus", () => {
   it("scrolls to the message and stops following the live end", async () => {
-    vi.useFakeTimers();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "requestAnimationFrame", "cancelAnimationFrame", "Date"] });
     const messages = ["a", "b", "c"].map((id, i) => message(id, i));
     render(
       <I18nProvider locale="en" resources={{ en: { chat: enChat } }}>
@@ -72,7 +72,30 @@ describe("ChatMessageList ?message= focus", () => {
     await act(async () => {
       vi.advanceTimersByTime(1100);
     });
+    await act(async () => {
+      vi.advanceTimersByTime(100);
+    });
     expect(scrolls).toContainEqual({ index: 0, align: "center" });
     expect(screen.getByTestId("rows").dataset.followAtBottom).toBe("false");
+  });
+
+  it("re-issues the jump until the row is rendered, then stops", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "requestAnimationFrame", "cancelAnimationFrame", "Date"] });
+    const messages = ["a", "b", "c"].map((id, i) => message(id, i));
+    render(
+      <I18nProvider locale="en" resources={{ en: { chat: enChat } }}>
+        <QueryClientProvider client={new QueryClient()}>
+          <ChatMessageList messages={messages} pendingTask={null} availability={undefined} focusMessageId="a" />
+        </QueryClientProvider>
+      </I18nProvider>,
+    );
+    // The stub renders every row, so the first check finds "a" and stops.
+    await act(async () => {
+      vi.advanceTimersByTime(1100);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(3000);
+    });
+    expect(scrolls.filter((s) => (s as { align?: string }).align === "center")).toHaveLength(1);
   });
 });

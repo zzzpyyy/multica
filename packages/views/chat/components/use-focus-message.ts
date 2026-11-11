@@ -34,7 +34,7 @@ export function useFocusMessage({
   hasOlder: boolean;
   isFetchingOlder: boolean;
   loadOlder?: () => void;
-  scrollTo: (index: number) => void;
+  scrollTo: (index: number, messageId: string) => void;
   onMissing?: () => void;
 }): string | null {
   const done = useRef(false);
@@ -46,7 +46,7 @@ export function useFocusMessage({
     if (!messageId || done.current || !ready || isFetchingOlder) return;
     if (index >= 0) {
       done.current = true;
-      scrollTo(index);
+      scrollTo(index, messageId);
       setHighlighted(messageId);
     } else if (hasOlder && loadOlder && pages.current < FOCUS_MESSAGE_MAX_PAGES) {
       if (requestedAt.current === loadedCount) return; // that page has not landed yet

@@ -306,11 +306,22 @@ export function ChatMessageList({
 
   const firstIndex = renderItems.length > 0 ? firstItemIndex : 0;
   // Virtuoso's scrollToIndex takes the 0-based data index, not firstItemIndex-based.
-  const scrollToRow = useCallback((index: number) => {
+  const scrollToRow = useCallback((index: number, messageId: string) => {
     // A programmatic jump is not wheel/key input: the bottom-stick would
     // otherwise treat it as layout drift and pin the list straight back down.
     disengage();
-    virtuosoRef.current?.scrollToIndex({ index, align: "center" });
+    // The page that brought the target in was prepended in this same commit;
+    // Virtuoso's prepend correction can still undo the first jump. Retry a
+    // few times until the row is actually rendered.
+    let tries = 0;
+    const attempt = () => {
+      virtuosoRef.current?.scrollToIndex({ index, align: "center" });
+      setTimeout(() => {
+        const shown = scrollRef.current?.querySelector(`[data-chat-message-id="${messageId}"]`);
+        if (!shown && ++tries < 6) attempt();
+      }, 150);
+    };
+    requestAnimationFrame(attempt);
   }, [disengage]);
   const highlightedMessageId = useFocusMessage({
     messageId: focusMessageId,
