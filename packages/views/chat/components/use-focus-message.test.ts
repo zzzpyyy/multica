@@ -6,6 +6,7 @@ type Props = Parameters<typeof useFocusMessage>[0];
 const base = (over: Partial<Props> = {}): Props => ({
   messageId: "m-1",
   index: -1,
+  loadedCount: 50,
   ready: true,
   hasOlder: false,
   isFetchingOlder: false,
@@ -38,8 +39,12 @@ describe("useFocusMessage (F7, B18)", () => {
     const { rerender } = renderHook((p: Props) => useFocusMessage(p), { initialProps: props });
     expect(props.loadOlder).toHaveBeenCalledTimes(1);
     rerender({ ...props, isFetchingOlder: true });
+    // Re-renders before the fetch flag flips (or with a new loadOlder
+    // identity) must not request the same page again.
+    rerender({ ...props, loadOlder: props.loadOlder });
+    rerender({ ...props });
     expect(props.loadOlder).toHaveBeenCalledTimes(1);
-    rerender({ ...props, index: 0 });
+    rerender({ ...props, loadedCount: 100, index: 0 });
     expect(props.scrollTo).toHaveBeenCalledWith(0);
     expect(props.onMissing).not.toHaveBeenCalled();
   });
@@ -47,9 +52,9 @@ describe("useFocusMessage (F7, B18)", () => {
   it("gives up after the page cap, or when history runs out", () => {
     const capped = base({ hasOlder: true });
     const { rerender } = renderHook((p: Props) => useFocusMessage(p), { initialProps: capped });
-    for (let i = 0; i < FOCUS_MESSAGE_MAX_PAGES + 2; i += 1) {
+    for (let i = 1; i <= FOCUS_MESSAGE_MAX_PAGES + 2; i += 1) {
       rerender({ ...capped, isFetchingOlder: true });
-      rerender({ ...capped, isFetchingOlder: false });
+      rerender({ ...capped, isFetchingOlder: false, loadedCount: 50 + i * 50 });
     }
     expect(capped.loadOlder).toHaveBeenCalledTimes(FOCUS_MESSAGE_MAX_PAGES);
     expect(capped.onMissing).toHaveBeenCalledTimes(1);

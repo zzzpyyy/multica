@@ -224,7 +224,7 @@ export function ChatMessageList({
   const pinToLiveEnd = useCallback(() => {
     virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end" });
   }, []);
-  const { isFollowing, onContentHeightChanged, hasReachedLiveEnd } = useStickToBottom(
+  const { isFollowing, disengage, onContentHeightChanged, hasReachedLiveEnd } = useStickToBottom(
     scrollContainerEl,
     pinToLiveEnd,
     active,
@@ -307,13 +307,17 @@ export function ChatMessageList({
   const firstIndex = renderItems.length > 0 ? firstItemIndex : 0;
   // Virtuoso's scrollToIndex takes the 0-based data index, not firstItemIndex-based.
   const scrollToRow = useCallback((index: number) => {
+    // A programmatic jump is not wheel/key input: the bottom-stick would
+    // otherwise treat it as layout drift and pin the list straight back down.
+    disengage();
     virtuosoRef.current?.scrollToIndex({ index, align: "center" });
-  }, []);
+  }, [disengage]);
   const highlightedMessageId = useFocusMessage({
     messageId: focusMessageId,
     index: focusMessageId
       ? renderItems.findIndex((item) => item.kind === "message" && item.message.id === focusMessageId)
       : -1,
+    loadedCount: renderItems.length,
     ready: hasReachedLiveEnd,
     hasOlder: hasOlderMessages,
     isFetchingOlder: isFetchingOlderMessages,

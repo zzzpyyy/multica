@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -128,6 +129,8 @@ export function resetRevealedLists(): void {
 export interface StickToBottom {
   /** For `followOutput`: the reader is still following the live end. */
   isFollowing(): boolean;
+  /** Explicit navigation (e.g. ?message=) must release bottom-stick first. */
+  disengage(): void;
   /** Wire to Virtuoso's `totalListHeightChanged`: the content resized. */
   onContentHeightChanged(): void;
   /**
@@ -353,6 +356,7 @@ export function useStickToBottom(
   return useMemo(
     () => ({
       isFollowing: () => follow.isFollowing(),
+      disengage: () => follow.disengage(),
       onContentHeightChanged: onResize,
       hasReachedLiveEnd,
     }),
