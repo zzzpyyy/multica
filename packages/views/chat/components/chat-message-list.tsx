@@ -62,6 +62,31 @@ import { PlanCardsForMessage } from "./plan-cards";
 import { useFocusMessage } from "./use-focus-message";
 import { useT } from "../../i18n";
 
+// ─── ?message= focus (fork, F7) ──────────────────────────────────────────
+
+/**
+ * How long a `?message=` jump keeps its target on screen while the list
+ * settles. Late content (plan cards, transcripts, measured row heights) lands
+ * within a second or two on a normal connection; this covers a slow one. Any
+ * reader input ends the hold earlier, so it never fights the reader.
+ */
+const FOCUS_HOLD_MS = 10_000;
+const FOCUS_CHECK_MS = 150;
+const READER_INPUT_EVENTS = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
+
+/**
+ * The row is fully inside the list's viewport, or fills it when it is taller.
+ * Rendered is not enough: Virtuoso also renders rows in its overscan band.
+ */
+function isRowOnScreen(container: HTMLElement, messageId: string): boolean {
+  const row = container.querySelector(`[data-chat-message-id="${messageId}"]`);
+  if (!row) return false;
+  const view = container.getBoundingClientRect();
+  const rect = row.getBoundingClientRect();
+  const visible = Math.min(rect.bottom, view.bottom) - Math.max(rect.top, view.top);
+  return visible >= Math.min(rect.height, view.height) - 1;
+}
+
 // ─── Public component ────────────────────────────────────────────────────
 
 interface ChatMessageListProps {
@@ -305,24 +330,62 @@ export function ChatMessageList({
   }, [messages, hasLive, pendingTaskId]);
 
   const firstIndex = renderItems.length > 0 ? firstItemIndex : 0;
-  // Virtuoso's scrollToIndex takes the 0-based data index, not firstItemIndex-based.
-  const scrollToRow = useCallback((index: number, messageId: string) => {
+  const renderItemsRef = useRef(renderItems);
+  renderItemsRef.current = renderItems;
+  const stopFocusHoldRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => stopFocusHoldRef.current?.(), []);
+  const scrollToRow = useCallback((_index: number, messageId: string) => {
     // A programmatic jump is not wheel/key input: the bottom-stick would
     // otherwise treat it as layout drift and pin the list straight back down.
     disengage();
-    // The page that brought the target in was prepended in this same commit;
-    // Virtuoso's prepend correction can still undo the first jump. Retry a
-    // few times until the row is actually rendered.
-    let tries = 0;
-    const attempt = () => {
-      virtuosoRef.current?.scrollToIndex({ index, align: "center" });
-      setTimeout(() => {
-        const shown = scrollRef.current?.querySelector(`[data-chat-message-id="${messageId}"]`);
-        if (!shown && ++tries < 6) attempt();
-      }, 150);
+    stopFocusHoldRef.current?.();
+    // One jump does not stay put. The page that brought the target in was
+    // prepended in this same commit, and after the jump the rows above it keep
+    // changing height (plan cards and transcripts fill in, Virtuoso replaces
+    // its estimates with measurements). Each change can push the target off
+    // screen, even to the top of the list. So hold it: re-center whenever it
+    // is not on screen, until the reader does anything or FOCUS_HOLD_MS ends.
+    const holdUntil = Date.now() + FOCUS_HOLD_MS;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let frame = 0;
+    const stop = () => {
+      clearTimeout(timer);
+      cancelAnimationFrame(frame);
+      for (const type of READER_INPUT_EVENTS) window.removeEventListener(type, stop, true);
+      if (stopFocusHoldRef.current === stop) stopFocusHoldRef.current = null;
     };
-    requestAnimationFrame(attempt);
+    const check = () => {
+      const container = scrollRef.current;
+      // By id, not the index at jump time: a later older page shifts it.
+      // Virtuoso's scrollToIndex takes the 0-based data index, not firstItemIndex-based.
+      const index = renderItemsRef.current.findIndex(
+        (item) => item.kind === "message" && item.message.id === messageId,
+      );
+      if (!container || index < 0 || Date.now() > holdUntil) return stop();
+      // Reaching the live end re-arms the bottom-stick (transcript-follow.ts),
+      // so a stray pin to the bottom would keep pulling the list down against
+      // this hold. Keep it released for as long as the hold lasts.
+      disengage();
+      if (!isRowOnScreen(container, messageId)) {
+        virtuosoRef.current?.scrollToIndex({ index, align: "center" });
+      }
+      timer = setTimeout(check, FOCUS_CHECK_MS);
+    };
+    for (const type of READER_INPUT_EVENTS) {
+      window.addEventListener(type, stop, { capture: true, passive: true });
+    }
+    stopFocusHoldRef.current = stop;
+    frame = requestAnimationFrame(check);
   }, [disengage]);
+  // Release the bottom-stick before asking for the older page, not when the
+  // jump runs. The page lands in one render; Virtuoso evaluates `followOutput`
+  // for that count change before this component's effects run, and while the
+  // stick still holds it schedules a scroll to the newest message that can
+  // land after the jump.
+  const loadOlderForFocus = useCallback(() => {
+    disengage();
+    onLoadOlderMessages?.();
+  }, [disengage, onLoadOlderMessages]);
   const highlightedMessageId = useFocusMessage({
     messageId: focusMessageId,
     index: focusMessageId
@@ -332,7 +395,7 @@ export function ChatMessageList({
     ready: hasReachedLiveEnd,
     hasOlder: hasOlderMessages,
     isFetchingOlder: isFetchingOlderMessages,
-    loadOlder: onLoadOlderMessages,
+    loadOlder: onLoadOlderMessages ? loadOlderForFocus : undefined,
     scrollTo: scrollToRow,
     onMissing: onFocusMessageMissing,
   });
