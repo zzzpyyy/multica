@@ -89,7 +89,7 @@ func (h *Handler) runSuperAnswer(ctx context.Context, task *db.AgentTaskQueue, o
 	if err != nil {
 		return
 	}
-	reply, err := h.createSuperAgentCommentWithParent(ctx, issue, sa, task.ID, question.ID, b.String())
+	reply, err := h.createSuperAgentCommentWithParent(ctx, issue, sa, task.ID, question.ID, session.CreatorID, b.String())
 	if err != nil {
 		slog.Warn("super-agent answer comment failed; asking the member", "question_id", uuidToString(q.ID), "error", err)
 		h.TaskService.PushQuestion(ctx, settled)

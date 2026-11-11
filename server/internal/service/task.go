@@ -6553,6 +6553,11 @@ func loadDelegatedFailureRecoveryTarget(ctx context.Context, q *db.Queries, fail
 		(failed.TriggerEvidenceKind.Valid && failed.TriggerEvidenceKind.String == string(attribution.EvidenceDelegatedFailure)) {
 		return nil, nil
 	}
+	// Fork (B, R9): a super-agent run's failure goes to the user's
+	// conversation, never back to the agent whose comment started it.
+	if fa, err := q.GetAgent(ctx, failed.AgentID); err == nil && IsSuperAgent(fa) {
+		return nil, nil
+	}
 	hasRetry, err := q.HasRetryTaskForParent(ctx, failed.ID)
 	if err != nil {
 		return nil, fmt.Errorf("check retry child: %w", err)
@@ -7836,6 +7841,12 @@ func commentEventFields(c db.Comment) map[string]any {
 
 func (s *TaskService) createAgentComment(ctx context.Context, issueID, agentID pgtype.UUID, content, commentType string, parentID, sourceTaskID pgtype.UUID) {
 	if content == "" {
+		return
+	}
+	// Fork (B, G4): the super-agent writes only through its actions. A failed
+	// run's error under the question would wake the asking agent and leave a
+	// write no super_agent_action or super_agent_question accounts for (R9).
+	if a, err := s.Queries.GetAgent(ctx, agentID); err == nil && IsSuperAgent(a) {
 		return
 	}
 	// Look up issue to get workspace ID for mention expansion and broadcasting.

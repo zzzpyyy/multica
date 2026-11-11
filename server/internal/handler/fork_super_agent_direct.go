@@ -103,7 +103,7 @@ func (h *Handler) superForward(ctx context.Context, task *db.AgentTaskQueue, ses
 		link = service.ChatMessageLink(slug, session.ID, parseUUID(p.MessageIDs[n-1]))
 	}
 	content := fmt.Sprintf("> 来自 super-agent 对话 · [查看原消息](%s)\n\n%s", link, p.Text)
-	comment, err := h.createSuperAgentComment(ctx, issue, sa, task.ID, content)
+	comment, err := h.createSuperAgentComment(ctx, issue, sa, task.ID, session.CreatorID, content)
 	if err != nil {
 		return "转达失败，请稍后再说一次。", map[string]any{"error": err.Error()}
 	}
@@ -156,12 +156,13 @@ func (h *Handler) superSetStatus(ctx context.Context, task *db.AgentTaskQueue, s
 
 // createSuperAgentComment writes a top-level comment authored by the
 // super-agent. source_task_id is the chat turn, so runs it starts are
-// attributed to the user who sent that turn.
-func (h *Handler) createSuperAgentComment(ctx context.Context, issue db.Issue, sa db.Agent, sourceTask pgtype.UUID, content string) (db.Comment, error) {
-	return h.createSuperAgentCommentWithParent(ctx, issue, sa, sourceTask, pgtype.UUID{}, content)
+// attributed to the user who sent that turn. member is the user it speaks
+// for: like their own comment, it lands in nobody's inbox but theirs to skip.
+func (h *Handler) createSuperAgentComment(ctx context.Context, issue db.Issue, sa db.Agent, sourceTask, member pgtype.UUID, content string) (db.Comment, error) {
+	return h.createSuperAgentCommentWithParent(ctx, issue, sa, sourceTask, pgtype.UUID{}, member, content)
 }
 
-func (h *Handler) createSuperAgentCommentWithParent(ctx context.Context, issue db.Issue, sa db.Agent, sourceTask, parent pgtype.UUID, content string) (db.Comment, error) {
+func (h *Handler) createSuperAgentCommentWithParent(ctx context.Context, issue db.Issue, sa db.Agent, sourceTask, parent, member pgtype.UUID, content string) (db.Comment, error) {
 	created, err := h.Queries.CreateComment(ctx, db.CreateCommentParams{
 		ID: dbid.NewV7(), IssueID: issue.ID, WorkspaceID: issue.WorkspaceID,
 		AuthorType: "agent", AuthorID: sa.ID, Content: content, Type: "comment", SourceTaskID: sourceTask, ParentID: parent,
@@ -175,6 +176,7 @@ func (h *Handler) createSuperAgentCommentWithParent(ctx context.Context, issue d
 	h.publish(protocol.EventCommentCreated, uuidToString(issue.WorkspaceID), "agent", uuidToString(sa.ID), map[string]any{
 		"comment": resp, "issue_title": issue.Title, "issue_assignee_type": textToPtr(issue.AssigneeType),
 		"issue_assignee_id": uuidToPtr(issue.AssigneeID), "issue_status": issue.Status, "issue_revision": created.IssueRevision,
+		service.SuperAgentOnBehalfOfKey: uuidToString(member),
 	})
 	return comment, nil
 }

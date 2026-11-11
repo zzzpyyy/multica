@@ -962,6 +962,11 @@ func registerNotificationListeners(bus *events.Bus, queries *db.Queries) {
 		for userID := range service.SuperAgentRoutedMembers(ctx, queries, parseUUID(commentID)) {
 			routed[userID] = true
 		}
+		// Fork (B rules 14 and 18, R2): a forward or answer is the member's
+		// own words, so it skips their inbox as their own comment would.
+		if member, _ := payload[service.SuperAgentOnBehalfOfKey].(string); member != "" {
+			routed[member] = true
+		}
 
 		notifySubscribers(ctx, queries, bus, issueID, issueStatus, e.WorkspaceID, e,
 			routed, "new_comment", "info",

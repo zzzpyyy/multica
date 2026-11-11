@@ -196,3 +196,28 @@ func TestSuperAnswerCandidatesStayInTree(t *testing.T) {
 		t.Fatalf("K12 candidates = %v", in)
 	}
 }
+
+// R9, G4: a failed answer run writes nothing on the issue: no error comment
+// under the question, no delegated-failure signal waking the asker. The
+// push itself comes from the task:failed listener (OnTaskFinalFailure).
+func TestFailedAnswerRunWritesNoComment(t *testing.T) {
+	f := newSuperFixture(t)
+	ctx := context.Background()
+	f.fx.Cleanup(t, `DELETE FROM super_agent_question WHERE chat_session_id=$1`, f.session)
+	x := f.issue("K10")
+	f.fx.Cleanup(t, `DELETE FROM agent_task_queue WHERE issue_id=$1`, x)
+	asker := f.fx.Task(t, f.agentID, testutil.Cols{"runtime_id": f.runtimeID, "issue_id": x, "status": "completed"})
+	ask := f.fx.Comment(t, x, "[@qa](mention://member/"+f.userID+") 要不要写迁移脚本？",
+		testutil.Cols{"author_type": "agent", "author_id": f.agentID, "source_task_id": asker})
+	f.svc.OnCommentCreated(ctx, util.MustParseUUID(ask))
+	var taskID pgtype.UUID
+	f.fx.QueryRow(t, `SELECT task_id FROM super_agent_question WHERE comment_id=$1`, ask).Scan(&taskID)
+	f.fx.Exec(t, `UPDATE agent_task_queue SET status='running', started_at=now(), delegated_from_task_id=$2 WHERE id=$1`, taskID, asker)
+
+	if _, err := f.svc.FailTask(ctx, taskID, "AWS authentication failed", "", "", "", "agent_error.provider_auth_or_access", false, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if n := f.fx.Count(t, `SELECT count(*) FROM comment WHERE issue_id=$1 AND id<>$2`, x, ask); n != 0 {
+		t.Fatalf("failed answer run left %d comments on the issue", n)
+	}
+}

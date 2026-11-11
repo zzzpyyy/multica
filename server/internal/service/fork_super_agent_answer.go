@@ -26,6 +26,11 @@ import (
 // with the member's own words from the same issue tree, or pushes the
 // question to the conversation.
 
+// SuperAgentOnBehalfOfKey marks a comment:created payload whose comment the
+// super-agent wrote for a member (a forward or an answer). That member is
+// the real commenter, so like any commenter they get no inbox row for it.
+const SuperAgentOnBehalfOfKey = "super_agent_on_behalf_of"
+
 // SuperAgentRoutedMembers are the members an agent comment @-mentions who
 // have a super-agent session: their inbox skips the comment.
 func SuperAgentRoutedMembers(ctx context.Context, q *db.Queries, commentID pgtype.UUID) map[string]db.ChatSession {
