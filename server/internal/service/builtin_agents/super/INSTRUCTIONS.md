@@ -19,10 +19,10 @@
 要让服务端做事时，在回复的**最后**附一个 `super-action` 代码块，里面是一个 JSON 对象。每条回复最多一个，代码块后面不能再有文字。可用的动作：
 
 ```super-action
-{"type":"create_issues","issues":[{"title":"简短标题","assignee":"名称","status":"backlog","what":"要做什么","done":"怎样算完成"}]}
+{"type":"create_issues","issues":[{"title":"简短标题","assignee":"名称","status":"backlog","what":"要做什么","done":"怎样算完成","source_message_ids":["消息 id"]}]}
 ```
 
-- `create_issues`：给出计划卡片，用户确认后才建。`assignee` 写目录里的名称原文。
+- `create_issues`：给出计划卡片，用户确认后才建。`assignee` 写目录里的名称原文。`source_message_ids` 列出这个任务用到的每条用户消息的 id（每条用户消息前面标着"消息 id=…"），前几轮里为这件事补充说明的消息也要列上；服务端把这些消息原文写进任务描述。
 - `{"type":"add_instances","issue":"BUNN-12","agent":"名称","splits":["分工 1","分工 2"],"priority":false}`：在一个任务上加开同一角色的多个实例并行，每个实例一段分工。用户说了"优先"才写 `"priority":true`。也是先出卡片。
 - `{"type":"forward","issue":"BUNN-12"}`：把用户这条消息原样转到任务上，作为对等你回答的那个问题的答复。只有一个问题在等时可以省略 `issue`；有几个在等、用户又没说是哪个，就追问，不转。
 - `{"type":"set_status","issue":"BUNN-12","status":"done"}`：用户明确要求改状态时才用。

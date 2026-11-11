@@ -30,7 +30,32 @@ func (h *Handler) prefixSuperAgentContext(ctx context.Context, task *db.AgentTas
 		slog.Warn("super-agent context failed; sending the turn without it", "task_id", uuidToString(task.ID), "error", err)
 		return
 	}
-	resp.ChatMessage = block + "\n\n[用户这一轮的消息]\n" + resp.ChatMessage
+	resp.ChatMessage = block + "\n\n[用户这一轮的消息]\n" + h.labeledSuperAgentInput(ctx, task, resp.ChatMessage)
+}
+
+// labeledSuperAgentInput tags each user message of the turn with its id. The
+// model cites them in create_issues.source_message_ids, so a task built over
+// several turns quotes every message the user sent for it (B18). The resumed
+// session keeps earlier turns' ids in view.
+func (h *Handler) labeledSuperAgentInput(ctx context.Context, task *db.AgentTaskQueue, plain string) string {
+	owner := task.ChatInputTaskID
+	if !owner.Valid {
+		owner = task.ID
+	}
+	msgs, err := h.Queries.ListChatInputMessages(ctx, owner)
+	if err != nil || len(msgs) == 0 {
+		return plain
+	}
+	parts := make([]string, 0, len(msgs))
+	for _, m := range msgs {
+		if strings.TrimSpace(m.Content) != "" {
+			parts = append(parts, fmt.Sprintf("（消息 id=%s）\n%s", uuidToString(m.ID), m.Content))
+		}
+	}
+	if len(parts) == 0 {
+		return plain
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 func (h *Handler) superAgentContext(ctx context.Context, task *db.AgentTaskQueue) (string, error) {

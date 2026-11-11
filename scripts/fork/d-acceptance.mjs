@@ -9,7 +9,8 @@
 //   MULTICA   CLI command, split on spaces (default "multica"); point it at the
 //             test server with --profile, e.g. MULTICA="multica --profile test"
 //   TB, TL    agent names (default TB, TL), both on one Claude runtime
-//   SLEEP     seconds each TB run sleeps (default 60)
+//   SLEEP     seconds each TB run sleeps (default 300, the PRD value; shorter
+//             runs end too close together for D6-D8 to tell who got the slot)
 //   RUNTIME   runtime id of TB (for D9); read from TB when unset
 //
 // Each case prints PASS/FAIL lines with the evidence it checked; the exit code
@@ -21,7 +22,7 @@ import { join } from "node:path";
 const CLI = (process.env.MULTICA || "multica").split(/\s+/).filter(Boolean);
 const TB = process.env.TB || "TB";
 const TL = process.env.TL || "TL";
-const SLEEP = Number(process.env.SLEEP || 60);
+const SLEEP = Number(process.env.SLEEP || 300);
 // A TB/TL run spends minutes in the model besides SLEEP; waits allow for it.
 const MODEL_SLACK = Number(process.env.MODEL_SLACK || 420);
 let failures = 0;

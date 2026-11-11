@@ -168,4 +168,20 @@ func TestSuperAgentClaimHasNoTools(t *testing.T) {
 	if resp.Agent.Instructions != service.SuperAgentInstructions() || strings.Contains(resp.Agent.Instructions, "saved notes") {
 		t.Fatal("claim does not carry the product-owned instructions")
 	}
+
+	// B18: each user message reaches the model with its id, so it can cite
+	// earlier turns in source_message_ids.
+	id := fx.Task(t, sa.ID, testutil.Cols{"runtime_id": claudeRT, "chat_session_id": sa.Session.ID, "status": "dispatched", "dispatched_at": time.Now()})
+	fx.Exec(t, `UPDATE agent_task_queue SET chat_input_task_id = id WHERE id = $1`, id)
+	msgID := fx.Insert(t, "chat_message", testutil.Cols{"chat_session_id": sa.Session.ID, "role": "user", "content": "过期的标红", "task_id": id})
+	task, err := testHandler.Queries.GetAgentTask(context.Background(), parseUUID(id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := newOwnerDaemonRequest("POST", "/claim", nil)
+	req.Header.Set("X-Client-Capabilities", protocol.DaemonCapabilityForkV1)
+	resp, _, _, _, _, failure = testHandler.buildClaimedTaskResponse(req, &task, runtime, claudeRT, testWorkspaceID)
+	if failure != nil || !strings.Contains(resp.ChatMessage, "（消息 id="+msgID+"）\n过期的标红") {
+		t.Fatalf("turn input lacks the message id: failure=%+v msg=%q", failure, resp.ChatMessage)
+	}
 }
