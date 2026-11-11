@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -138,15 +139,15 @@ func (s *TaskService) loadSuperTurn(ctx context.Context, q *db.Queries, task db.
 func (s *TaskService) planSuperAction(ctx context.Context, q *db.Queries, task db.AgentTaskQueue, body string) (string, *superPlan) {
 	visible, raw, ok := splitSuperAction(body)
 	if !ok {
-		return body, nil
+		return capReply(body, superReplyMaxRunes), nil
 	}
 	var act superAction
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &act); err != nil {
-		return visible, nil // malformed: strip it, do nothing
+		return capReply(visible, superReplyMaxRunes), nil // malformed: strip it, do nothing
 	}
 	turn, err := s.loadSuperTurn(ctx, q, task)
 	if err != nil {
-		return visible, nil
+		return capReply(visible, superReplyMaxRunes), nil
 	}
 	switch act.Type {
 	case "create_issues":
@@ -166,9 +167,9 @@ func (s *TaskService) planSuperAction(ctx context.Context, q *db.Queries, task d
 		if kind == "set_status" {
 			p.Status = strings.TrimSpace(act.Status)
 		}
-		return orDefault(visible, "好的。"), &superPlan{kind: kind, payload: p}
+		return orDefault(capReply(visible, superReplyMaxRunes), "好的。"), &superPlan{kind: kind, payload: p}
 	}
-	return visible, nil // answer/ask belong to answer turns; ignored here
+	return capReply(visible, superReplyMaxRunes), nil // answer/ask belong to answer turns; ignored here
 }
 
 func orDefault(s, d string) string {
@@ -176,6 +177,39 @@ func orDefault(s, d string) string {
 		return d
 	}
 	return s
+}
+
+// superReplyMaxRunes is rule 8's limit on a reply outside the plan card.
+const superReplyMaxRunes = 100
+
+// cardNote is the text above a plan card. The card shows every field, so
+// text that runs past rule 8's 100 characters is the model restating it
+// (B13); the server replaces it with the one sentence the card needs.
+func cardNote(visible string) string {
+	if v := strings.TrimSpace(visible); v != "" && utf8.RuneCountInString(v) <= superReplyMaxRunes {
+		return v
+	}
+	return "请确认下面的计划。"
+}
+
+// capReply holds the model's own text to rule 8's limit (B13, B14): it keeps
+// the sentences that fit, or cuts with "…" when the first sentence alone is
+// too long. Server-written notes (not found, refusals) are not passed here.
+// ponytail: a cut can drop a trailing question; INSTRUCTIONS.md keeps
+// replies short, so this is a backstop that should rarely fire.
+func capReply(s string, max int) string {
+	s = strings.TrimSpace(s)
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	for i := max - 1; i >= max/3; i-- {
+		switch r[i] {
+		case '。', '！', '？', '!', '?', '\n':
+			return strings.TrimSpace(string(r[:i+1]))
+		}
+	}
+	return string(r[:max-1]) + "…"
 }
 
 // superDirectory is the workspace directory assignees are matched against
@@ -241,7 +275,7 @@ func (d superDirectory) notFound(missing []string) string {
 func (s *TaskService) planCreateIssues(ctx context.Context, q *db.Queries, turn superTurn, visible string, act superAction) (string, *superPlan) {
 	dir := s.loadSuperDirectory(ctx, q, turn.session.WorkspaceID)
 	if len(act.Issues) == 0 {
-		return visible, nil
+		return capReply(visible, superReplyMaxRunes), nil
 	}
 	var missing []string
 	needsDetail := false
@@ -274,9 +308,10 @@ func (s *TaskService) planCreateIssues(ctx context.Context, q *db.Queries, turn 
 		return dir.notFound(missing), nil
 	}
 	if needsDetail { // rule 2, B11/B17
-		return strings.TrimSpace(visible + "\n\n还需要说明：要做什么 / 怎样算完成。"), nil
+		const ask = "\n\n还需要说明：要做什么 / 怎样算完成。"
+		return strings.TrimSpace(capReply(visible, superReplyMaxRunes-utf8.RuneCountInString(ask)) + ask), nil
 	}
-	return orDefault(visible, "请确认下面的计划。"), &superPlan{kind: "create_issues", payload: map[string]any{"items": items}}
+	return cardNote(visible), &superPlan{kind: "create_issues", payload: map[string]any{"items": items}}
 }
 
 // keepUserMessages keeps the ids that are the user's messages in this
@@ -331,7 +366,7 @@ func (s *TaskService) planAddInstances(ctx context.Context, q *db.Queries, turn 
 	if ws, err := q.GetWorkspace(ctx, issue.WorkspaceID); err == nil {
 		prefix = ws.IssuePrefix
 	}
-	return orDefault(visible, "请确认下面的计划。"), &superPlan{kind: "add_instances", payload: map[string]any{
+	return cardNote(visible), &superPlan{kind: "add_instances", payload: map[string]any{
 		"issue":    SuperRef{ID: util.UUIDToString(issue.ID), Identifier: IssueIdentifier(prefix, issue.Number), Title: issue.Title},
 		"agent":    SuperRef{ID: who.ID, Name: who.Name},
 		"splits":   splits,

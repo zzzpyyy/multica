@@ -91,6 +91,32 @@ func TestPlanCreateIssues(t *testing.T) {
 		t.Fatalf("item = %+v", items)
 	}
 
+	// B13: text over 100 characters above a card is the card restated; the
+	// server keeps one sentence. Short text stays as the model wrote it.
+	long := "请确认这两个任务：\n\n" + strings.Repeat("- 标题：排查接口超时\n- 负责人：彦宏\n- 状态：backlog\n", 4)
+	visible, plan = f.plan(strings.Replace(fence(`{"type":"create_issues","issues":[{"title":"看板暗色模式","assignee":"尤雨溪","status":"backlog","what":"看板支持暗色模式","done":"切到深色时看板变深色"}]}`), "好的。", long, 1))
+	if plan == nil || visible != "请确认下面的计划。" {
+		t.Fatalf("long card text: plan %v, reply %q", plan != nil, visible)
+	}
+
+	// B13/B14: a reply without a card keeps the sentences that fit in 100.
+	chatty := strings.Repeat("我负责和你把需求聊清楚，然后出计划卡片。", 6) + "还有别的吗？" // 126 runes
+	visible, plan = f.plan(chatty)
+	if plan != nil || len([]rune(visible)) > 100 || !strings.HasSuffix(visible, "。") || !strings.HasPrefix(chatty, visible) {
+		t.Fatalf("long reply: %d runes %q", len([]rune(visible)), visible)
+	}
+	if got := capReply(strings.Repeat("长", 150), 100); len([]rune(got)) != 100 || !strings.HasSuffix(got, "…") {
+		t.Fatalf("no sentence end: %d runes", len([]rune(got)))
+	}
+	visible, _ = f.plan(fence(`{"type":"create_issues","issues":[{"title":"优化看板","assignee":"尤雨溪","what":"优化看板","done":""}]}`))
+	if strings.Contains(visible, "好的。") == false || len([]rune(visible)) > 100 {
+		t.Fatalf("ask reply: %q", visible)
+	}
+	visible, _ = f.plan(strings.Replace(fence(`{"type":"create_issues","issues":[{"title":"优化看板","assignee":"尤雨溪","what":"优化看板","done":""}]}`), "好的。", chatty, 1))
+	if n := len([]rune(visible)); n > 100 || !strings.HasSuffix(visible, "还需要说明：要做什么 / 怎样算完成。") {
+		t.Fatalf("long ask reply: %d runes %q", n, visible)
+	}
+
 	// B10: an unknown assignee replaces the reply with the directory; no card.
 	visible, plan = f.plan(fence(`{"type":"create_issues","issues":[{"title":"周报","assignee":"张三","what":"整理周报","done":"发出"}]}`))
 	if plan != nil || !strings.Contains(visible, "找不到「张三」") || !strings.Contains(visible, "尤雨溪") || strings.Contains(visible, "super-agent") {
