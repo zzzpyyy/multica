@@ -77,6 +77,27 @@ func TestSplitSuperAction(t *testing.T) {
 	}
 }
 
+func TestCapReply(t *testing.T) {
+	// B11 on S00 (QA, batch 3 retest): 108 characters, sentence ends at
+	// characters 11 and 26 only. It was cut mid-sentence ("…并说明周报整…")
+	// because the search for a sentence end stopped at character 33. The
+	// directory names are replaced by same-length placeholders.
+	b11 := "是指刚才的整理周报吗？张三不在目录里，没法交给张三。请从研发小队甲组、前端甲、后端、测试、组长、TA、TB、TL、qa、member-alpha、qa-member-2 中选一个负责人，并说明周报整理成什么样算完成。"
+	for _, tc := range []struct{ in, want string }{
+		{b11, "是指刚才的整理周报吗？张三不在目录里，没法交给张三。"},
+		{"短句。" + strings.Repeat("长", 120), "短句。"},                                                      // one early sentence still wins over "…"
+		{strings.Repeat("长", 90) + "。" + strings.Repeat("后", 20) + "？", strings.Repeat("长", 90) + "。"}, // last end that fits
+		{"列表：\n" + strings.Repeat("长", 120), "列表：\n" + strings.Repeat("长", 95) + "…"},                  // a line break is not an end
+		{strings.Repeat("长", 150), strings.Repeat("长", 99) + "…"},                                      // first sentence too long
+		{"  不超过就原样。  ", "不超过就原样。"},
+	} {
+		got := capReply(tc.in, 100)
+		if got != tc.want || len([]rune(got)) > 100 {
+			t.Errorf("capReply(%q) = %q (%d), want %q", tc.in, got, len([]rune(got)), tc.want)
+		}
+	}
+}
+
 func TestPlanCreateIssues(t *testing.T) {
 	f := newSuperFixture(t)
 	f.turn("给尤雨溪建个任务：看板支持暗色模式，完成标准是系统切到深色时看板跟着变深色，先别跑")
@@ -115,6 +136,11 @@ func TestPlanCreateIssues(t *testing.T) {
 	visible, _ = f.plan(strings.Replace(fence(`{"type":"create_issues","issues":[{"title":"优化看板","assignee":"尤雨溪","what":"优化看板","done":""}]}`), "好的。", chatty, 1))
 	if n := len([]rune(visible)); n > 100 || !strings.HasSuffix(visible, "还需要说明：要做什么 / 怎样算完成。") {
 		t.Fatalf("long ask reply: %d runes %q", n, visible)
+	}
+	// No whole sentence fits beside the ask: the ask alone, never a "…" cut.
+	visible, _ = f.plan(strings.Replace(fence(`{"type":"create_issues","issues":[{"title":"优化看板","assignee":"尤雨溪","what":"优化看板","done":""}]}`), "好的。", strings.Repeat("长", 120), 1))
+	if visible != "还需要说明：要做什么 / 怎样算完成。" {
+		t.Fatalf("one long sentence before the ask: %q", visible)
 	}
 
 	// B10: an unknown assignee replaces the reply with the directory; no card.

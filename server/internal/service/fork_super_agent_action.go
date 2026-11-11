@@ -192,24 +192,35 @@ func cardNote(visible string) string {
 	return "请确认下面的计划。"
 }
 
-// capReply holds the model's own text to rule 8's limit (B13, B14): it keeps
-// the sentences that fit, or cuts with "…" when the first sentence alone is
-// too long. Server-written notes (not found, refusals) are not passed here.
+// capReply holds the model's own text to rule 8's limit (B13, B14): whole
+// sentences that fit, cut with "…" only when the first sentence alone is too
+// long. Server-written notes (not found, refusals) are not passed here.
 // ponytail: a cut can drop a trailing question; INSTRUCTIONS.md keeps
 // replies short, so this is a backstop that should rarely fire.
 func capReply(s string, max int) string {
 	s = strings.TrimSpace(s)
+	if v, ok := fitSentences(s, max); ok {
+		return v
+	}
+	return string([]rune(s)[:max-1]) + "…"
+}
+
+// fitSentences returns s if it fits in max runes, else its longest prefix
+// that ends a sentence (。！？!?), however early; ok is false when even the
+// first sentence is longer. A line break is not a sentence end: cutting there
+// can leave a dangling "：" or a bare list item.
+func fitSentences(s string, max int) (string, bool) {
 	r := []rune(s)
 	if len(r) <= max {
-		return s
+		return s, true
 	}
-	for i := max - 1; i >= max/3; i-- {
+	for i := max - 1; i >= 0; i-- {
 		switch r[i] {
-		case '。', '！', '？', '!', '?', '\n':
-			return strings.TrimSpace(string(r[:i+1]))
+		case '。', '！', '？', '!', '?':
+			return string(r[:i+1]), true
 		}
 	}
-	return string(r[:max-1]) + "…"
+	return "", false
 }
 
 // superDirectory is the workspace directory assignees are matched against
@@ -309,7 +320,9 @@ func (s *TaskService) planCreateIssues(ctx context.Context, q *db.Queries, turn 
 	}
 	if needsDetail { // rule 2, B11/B17
 		const ask = "\n\n还需要说明：要做什么 / 怎样算完成。"
-		return strings.TrimSpace(capReply(visible, superReplyMaxRunes-utf8.RuneCountInString(ask)) + ask), nil
+		// The model's sentences that fit beside the ask; none fit -> the ask alone.
+		note, _ := fitSentences(strings.TrimSpace(visible), superReplyMaxRunes-utf8.RuneCountInString(ask))
+		return strings.TrimSpace(note + ask), nil
 	}
 	return cardNote(visible), &superPlan{kind: "create_issues", payload: map[string]any{"items": items}}
 }
