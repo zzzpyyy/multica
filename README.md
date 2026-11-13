@@ -177,7 +177,7 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 | `server/pkg/db/queries/issue.sql`、`workspace_delete.sql` | 删任务、删工作区时删掉实例批次（新表没有外键） | D |
 | `server/internal/service/task.go` | 领取后如果这个角色还有排队行和名额，再唤醒一次 daemon；实例的重试不看普通运行的待处理名额；认得新的唯一索引名 | D1、D2 |
 | `server/cmd/migrate/main.go` | 登记 9002–9004 的并发索引清理 | D |
-| `server/cmd/server/router.go` | 注册 `POST`/`GET /api/issues/{id}/instances`、`POST /api/agents/super-agent`、计划卡片的三个接口 | D1、D5、D9、D11、D14、D15、B1 |
+| `server/cmd/server/router.go` | 注册 `POST`/`GET /api/issues/{id}/instances`、`POST /api/agents/super-agent`、计划卡片的三个接口；注册 `GET /api/issues/attention`（一句话进度的"待你验收""待你回复"） | D1、D5、D9、D11、D14、D15、B1、A2、A6、A7、A20–A23、A34、A37 |
 | `server/internal/handler/issue_table_query.go`、`issue_table_facets.go` | 表格查询的 `filters.aggregate_sub_issues`：父任务符合这个查询的其他条件（并且状态在 `parent_statuses` 里）时，子任务不返回；行、分组计数、总数和状态分面都按聚合算，其他分面不聚合 | A1、A9、A15–A19 |
 | `server/cmd/server/main.go` | 注册实例批次的结算监听和 30 秒兜底扫描 | D3、D10、D14 |
 | `server/internal/handler/chat.go` | super-agent 的会话不能新建第二段、归档、删除（409 `super_agent_session_locked`） | B1 |
