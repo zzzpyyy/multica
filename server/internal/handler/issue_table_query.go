@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package handler
 
 import (
@@ -118,6 +120,17 @@ type issueTableFiltersRequest struct {
 	// explicit empty list matches nothing.
 	UnreadIssueIDs   []string `json:"unread_issue_ids,omitempty"`
 	IncludeSubIssues *bool    `json:"include_sub_issues,omitempty"`
+	// AggregateSubIssues (fork, PRD A rule 2) leaves out an issue whose parent
+	// is itself in this list. Absent: no aggregation.
+	AggregateSubIssues *issueTableAggregateRequest `json:"aggregate_sub_issues,omitempty"`
+}
+
+// issueTableAggregateRequest: a parent counts as "in the list" when it
+// matches every other filter of the query and, when ParentStatuses is given,
+// has one of those statuses (the surface's visible columns, so a parent in a
+// hidden column does not hide its sub-issues). Never an empty list.
+type issueTableAggregateRequest struct {
+	ParentStatuses []string `json:"parent_statuses,omitempty"`
 }
 
 type issueTableSortRequest struct {
@@ -292,6 +305,11 @@ func canonicalIssueTableFingerprint(workspaceID string, spec issueTableQuerySpec
 	normalized.Filters.WorkingIssueIDs = sortedUniqueStrings(normalized.Filters.WorkingIssueIDs)
 	normalized.Filters.UnreadIssueIDs = sortedUniqueStrings(normalized.Filters.UnreadIssueIDs)
 	normalized.Filters.Creators = sortedUniqueActors(normalized.Filters.Creators)
+	if aggregate := normalized.Filters.AggregateSubIssues; aggregate != nil {
+		normalized.Filters.AggregateSubIssues = &issueTableAggregateRequest{
+			ParentStatuses: sortedUniqueStrings(aggregate.ParentStatuses),
+		}
+	}
 	for key, values := range normalized.Filters.Properties {
 		normalized.Filters.Properties[key] = sortedUniqueRawJSON(values)
 	}
@@ -537,6 +555,18 @@ func (h *Handler) compileIssueTableQuery(w http.ResponseWriter, r *http.Request,
 		if status == "" || len(status) > 64 {
 			writeError(w, http.StatusBadRequest, "invalid filters.statuses")
 			return issueTableSQL{}, false
+		}
+	}
+	if aggregate := spec.Filters.AggregateSubIssues; aggregate != nil {
+		if aggregate.ParentStatuses != nil && len(aggregate.ParentStatuses) == 0 {
+			writeError(w, http.StatusBadRequest, "invalid filters.aggregate_sub_issues.parent_statuses")
+			return issueTableSQL{}, false
+		}
+		for _, status := range aggregate.ParentStatuses {
+			if status == "" || len(status) > 64 {
+				writeError(w, http.StatusBadRequest, "invalid filters.aggregate_sub_issues.parent_statuses")
+				return issueTableSQL{}, false
+			}
 		}
 	}
 	if len(spec.Filters.Statuses) > 0 {
@@ -868,8 +898,23 @@ func (h *Handler) compileIssueTableQuery(w http.ResponseWriter, r *http.Request,
 	}
 	where = appendIssueTableSearchFilter(where, addArg, spec.Search)
 
+	compiled := strings.Join(where, " AND ")
+	if aggregate := spec.Filters.AggregateSubIssues; aggregate != nil {
+		// Fork (PRD A rule 2): built from the finished predicate, so a filter
+		// added above (upstream included) applies to the parent's membership
+		// too. The subquery rebinds alias `i` and reuses the same $n params.
+		// ponytail: the subquery reads the whole list once per statement
+		// (hashed SubPlan); materialize the membership per request if one
+		// list reaches tens of thousands of issues.
+		parentMembership := "(" + compiled + ")"
+		if len(aggregate.ParentStatuses) > 0 {
+			parentMembership += fmt.Sprintf(" AND i.status = ANY(%s::text[])", addArg(sortedUniqueStrings(aggregate.ParentStatuses)))
+		}
+		compiled = fmt.Sprintf("(%s) AND (i.parent_issue_id IS NULL OR i.parent_issue_id NOT IN (SELECT i.id FROM issue i WHERE %s))", compiled, parentMembership)
+	}
+
 	return issueTableSQL{
-		where:       strings.Join(where, " AND "),
+		where:       compiled,
 		args:        args,
 		fingerprint: fingerprint,
 		workspaceID: workspaceUUID,

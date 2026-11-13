@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package handler
 
 import (
@@ -63,6 +65,11 @@ func issueTableQueryWithoutFacet(input issueTableQuerySpec, facet issueTableFace
 		output.Filters.Negate = kept
 	}
 
+	// Fork (PRD A rule 2): only the status facet (column headers, empty
+	// state) counts the aggregated list; submenu counts stay per issue.
+	if facet.Kind != "status" {
+		output.Filters.AggregateSubIssues = nil
+	}
 	switch facet.Kind {
 	case "status":
 		output.Filters.Statuses = nil
@@ -105,6 +112,11 @@ func issueTableFacetIdentity(facet issueTableFacetSpec) string {
 }
 
 func issueTableBaseFacetExpression(query issueTableQuerySpec, facet issueTableFacetSpec) (string, bool) {
+	// Fork (PRD A rule 2): the batched base predicate is aggregated, which only
+	// the status facet may use; other facets run on their own query.
+	if query.Filters.AggregateSubIssues != nil && facet.Kind != "status" {
+		return "", false
+	}
 	switch facet.Kind {
 	case "status":
 		return "i.status", len(query.Filters.Statuses) == 0
