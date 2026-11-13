@@ -103,14 +103,14 @@ function ListRowContent({
         data-peeked={peeked ? "" : undefined}
         style={containerStyle}
         {...containerProps}
-        className={`group/row flex h-[var(--issue-row-height)] items-center gap-2 px-4 text-body transition-colors ${
+        className={`group/row flex min-h-[var(--issue-row-height)] items-start gap-2 px-4 text-body transition-colors ${
           selected
             ? "bg-surface-selected hover:not-data-[popup-open]:bg-surface-selected data-[popup-open]:bg-surface-selected"
             : "hover:not-data-[popup-open]:bg-surface-hover data-[popup-open]:bg-surface-hover"
         } ${PEEKED_ROW_CLASS} ${isDragging ? "opacity-30" : ""}`}
       >
         <div
-          className="relative flex shrink-0 items-center justify-center w-4 h-4"
+          className="relative mt-[calc((var(--issue-row-height)-1rem)/2)] flex shrink-0 items-center justify-center w-4 h-4"
           {...checkboxProps}
         >
           {storeProperties.priority && issue.priority !== "none" && (
@@ -131,9 +131,11 @@ function ListRowContent({
         <AppLink
           href={p.issueDetail(issue.id)}
           newTabTitle={issue.identifier}
-          className={`flex flex-1 items-center gap-2 min-w-0 ${isDragging ? "pointer-events-none" : ""}`}
+          className={`flex min-w-0 flex-1 flex-col ${isDragging ? "pointer-events-none" : ""}`}
           {...peekLinkProps}
         >
+          {/* Fork (PRD A16): the row's own line; the one-line progress gets the lines below it. */}
+          <span className="flex h-[var(--issue-row-height)] min-w-0 items-center gap-2">
           <span className="min-w-16 shrink-0 text-caption text-muted-foreground">
             {issue.identifier}
           </span>
@@ -156,9 +158,6 @@ function ListRowContent({
               <span className="shrink-0 text-micro text-muted-foreground">
                 {t(($) => $.nested.cancelled, { n: nested.summary.cancelled })}
               </span>
-            )}
-            {nested && (
-              <ProgressLine segments={nested.segments} className="min-w-0 shrink truncate" />
             )}
             {nested && nested.summary.total > 0 && (
               <NestedToggle expanded={nested.expanded} onToggle={nested.onToggle} />
@@ -213,6 +212,8 @@ function ListRowContent({
               enableHoverCard
             />
           )}
+          </span>
+          {nested && <ProgressLine segments={nested.segments} className="-mt-1 block pb-2 pl-[4.5rem]" />}
         </AppLink>
       </div>
     </IssueActionsContextMenu>

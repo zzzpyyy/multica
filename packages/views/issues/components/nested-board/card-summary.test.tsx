@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import { buildIssueStatusCatalog } from "@multica/core/issue-statuses/queries";
 import { nestedSummary, progressSegments, BUILT_IN_STATUS_ORDER } from "@multica/core/issues";
 import type { Issue } from "@multica/core/types";
@@ -123,6 +123,43 @@ describe("one-line progress, PRD v3.4 wording", () => {
     expect(screen.getByText("1 项待你验收").className).toContain("text-warning");
     expect(screen.getByText("1 项待你回复").className).toContain("text-warning");
     expect(screen.getByText("2 个进行中、1 个审核中").className).not.toContain("text-warning");
+  });
+
+  // The layout fix of 13 Nov: P1's line had wrapped mid-word ("接 / 口联调",
+  // "1 项 / 待你验收") on the row it shared with the cancelled count and
+  // "展开". Each segment is now an unbreakable-unless-it-must inline-block on
+  // lines of its own; a real browser check of the widths is in BUNN-31.
+  it("puts the line on rows of its own, one inline-block per segment, nothing truncated", () => {
+    const children = p1();
+    const segments = progressSegments(children, {
+      parentIdentifier: P1,
+      statusOrder: BUILT_IN_STATUS_ORDER,
+      awaitingReview: 1,
+    });
+    renderWithI18n(
+      <NestedCardSummary summary={nestedSummary(children)} segments={segments} expanded={false} onToggle={() => {}} />,
+      { locale: "zh-Hans" },
+    );
+    const progress = screen.getByTestId("nested-progress-line");
+    const parts = within(progress).getAllByTestId("nested-progress-segment");
+    expect(parts.map((part) => part.textContent)).toEqual([
+      "阶段 2/3 ·",
+      "审核中：接口联调 ·",
+      "1 个阻塞 ·",
+      "1 项待你验收",
+    ]);
+    for (const part of parts) expect(part.className).toContain("inline-block");
+    expect(within(parts[3]!).getByText("1 项待你验收").className).toContain("text-warning");
+    expect(progress.className).not.toMatch(/truncate|line-clamp|ellipsis|nowrap/);
+    expect(progress.className).toContain("block");
+
+    const cancelled = screen.getByText("含 1 个已取消");
+    const toggle = screen.getByRole("button", { name: "展开" });
+    expect(progress).not.toContainElement(cancelled);
+    expect(progress).not.toContainElement(toggle);
+    // The cancelled count and the toggle share the row after the line, not its row.
+    expect(progress.nextElementSibling).toContainElement(cancelled);
+    expect(progress.nextElementSibling).toContainElement(toggle);
   });
 
   it("a card without children has no expand toggle", () => {

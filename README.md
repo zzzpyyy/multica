@@ -199,6 +199,8 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 | `packages/views/modals/create-issue.tsx`、`feedback.tsx`、`run-confirm.tsx`、`issues/components/wakeup-create.tsx`、`squads/components/squad-detail-page.tsx`、`settings/components/issue-statuses-tab.tsx`、`quick-actions/components/quick-action-dialog.tsx` 及测试 | 长文本类输入框和运行确认弹窗固定 ⌘+Enter；状态说明补输入法判断；快捷操作的提示词新增 ⌘+Enter 提交 | C11、C12、C14–C17 |
 | `packages/core/issues/stores/view-store.ts`、`views/issues/components/issues-header.tsx`、`issues/surface/use-issue-surface-controller.ts` | 看板「显示」菜单的「嵌套子任务」开关，默认开；开着时看板只取顶层任务 | A1、A15 |
 | `packages/views/issues/components/board-card.tsx`、`board-view.tsx`、`packages/core/issues/index.ts` | 卡片上的子任务摘要和展开列表（新组件在 `issues/components/nested-board/`）；卡片上的"<角色> 运行 m · 排队 q" | A2–A5、A12、A13、D5 |
+| `packages/views/issues/components/list-row.tsx` 及测试 | 列表行上的进度环、"含 N 个已取消"和展开；一句话进度在行下面单独占一行或几行，只在分段之间换行 | A16 |
+| `packages/views/modals/feedback.tsx`（GitHub 链接）及测试 | 删掉反馈弹窗里指向上游 Issues 的链接：本仓库没开 Issues。反馈照常提交到服务端 | — |
 | `packages/views/issues/components/issue-detail.tsx` | 子任务进度按 done + cancelled 计数；实例列表 | A2、D5、D9 |
 | `packages/core/issues/ws-updaters.ts` 及测试 | 建子任务时刷新批量子任务查询；改父任务时在子任务缓存里也找旧父任务 | A8、A9 |
 | `packages/core/realtime/use-realtime-sync.ts` 及测试 | 回到前台、网络恢复时刷新任务数据；`task:*`、`daemon:register` 刷新全部实例查询；推送消息写入缓存并刷新未读；`chat:done` 刷新计划卡片 | A11、M4、D5、D9、F7、B2、B7 |

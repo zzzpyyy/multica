@@ -91,6 +91,19 @@ describe("ListRow on an aggregating list (A16)", () => {
     expect(screen.queryByTestId("children-list")).toBeNull();
   });
 
+  it("puts the one-line progress on lines of its own below the row's line", () => {
+    renderRow(false);
+    const progress = screen.getByTestId("nested-progress-line");
+    const rowLine = progress.previousElementSibling as HTMLElement;
+    expect(rowLine).toContainElement(screen.getByText("P1"));
+    expect(rowLine).toContainElement(screen.getByText("含 1 个已取消"));
+    expect(rowLine).toContainElement(screen.getByRole("button", { name: "展开" }));
+    expect(rowLine).not.toContainElement(progress);
+    expect(progress.className).not.toMatch(/truncate|line-clamp|ellipsis|nowrap/);
+    // Still inside the row's link, so clicking it opens the issue as before.
+    expect(progress.closest("a")).toHaveAttribute("href", "/acme/issues/p1");
+  });
+
   it("lists the sub-issues under the row when expanded", () => {
     renderRow(true);
     expect(screen.getByRole("button", { name: "收起" })).toHaveAttribute("aria-expanded", "true");

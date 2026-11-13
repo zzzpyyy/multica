@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { forwardRef, useImperativeHandle, useRef } from "react";
@@ -161,6 +162,17 @@ describe("FeedbackModal", () => {
     render(<FeedbackModal onClose={vi.fn()} initialMessage="kind: desktop_route_error" />);
 
     expect(screen.getByLabelText("feedback editor")).toHaveValue("kind: desktop_route_error");
+  });
+
+  // Fork: upstream's hint linked to multica-ai/multica's issues; this fork's
+  // repository has Issues off, so the dialog offers no GitHub link at all.
+  it("has no GitHub issue link", () => {
+    storedDraftMessage = "";
+    render(<FeedbackModal onClose={vi.fn()} />);
+
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.queryByText("Open an issue")).toBeNull();
+    expect(document.body.innerHTML).not.toContain("github.com");
   });
 
   it("does not overwrite an existing feedback draft when crash report context is provided", () => {

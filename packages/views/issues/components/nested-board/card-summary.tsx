@@ -60,23 +60,33 @@ export function useProgressText() {
 /**
  * The one-line progress (PRD A rule 7): segments joined by " · ", the two
  * calls to action in a warning color. Nothing renders for no segments.
+ *
+ * It wraps only between segments: each segment is an inline-block, so one
+ * that fits on a line moves down whole instead of breaking ("接 / 口联调"),
+ * and one wider than the line wraps inside itself, never truncated. The
+ * separator sticks to the end of the segment before it. The text content is
+ * still exactly the segments joined by " · ".
  */
 export function ProgressLine({
   segments,
-  className = "min-w-0 flex-1",
+  className = "block",
 }: {
   segments: readonly ProgressSegment[];
   className?: string;
 }) {
   const text = useProgressText();
   if (segments.length === 0) return null;
+  const last = segments.length - 1;
   return (
     <span className={`${className} text-micro text-muted-foreground`} data-testid="nested-progress-line">
       {segments.map((segment, i) => (
         <Fragment key={segment.kind}>
-          {i > 0 && SEPARATOR}
-          <span className={isCallToAction(segment) ? "font-medium text-warning" : undefined}>
-            {text(segment)}
+          {i > 0 && " "}
+          <span className="inline-block max-w-full break-words" data-testid="nested-progress-segment">
+            <span className={isCallToAction(segment) ? "font-medium text-warning" : undefined}>
+              {text(segment)}
+            </span>
+            {i < last && <span className="whitespace-nowrap">{SEPARATOR.trimEnd()}</span>}
           </span>
         </Fragment>
       ))}
@@ -114,10 +124,11 @@ export function NestedToggle({ expanded, onToggle }: { expanded: boolean; onTogg
 }
 
 /**
- * Card row for the nested board: the one-line progress, the cancelled count
- * and the expand toggle. The "closed/total" figure itself rides the card's
- * existing progress ring. A parent without sub-issues shows only what waits
- * on the viewer (A21's P2), and nothing at all otherwise (A3).
+ * Card rows for the nested board: the one-line progress on lines of its own,
+ * then the cancelled count and the expand toggle. The "closed/total" figure
+ * itself rides the card's existing progress ring. A parent without sub-issues
+ * shows only what waits on the viewer (A21's P2), and nothing at all
+ * otherwise (A3).
  */
 export function NestedCardSummary({
   summary,
@@ -133,16 +144,22 @@ export function NestedCardSummary({
   const { t } = useT("issues");
   if (summary.total === 0 && segments.length === 0) return null;
   return (
-    <div className="mt-1.5 flex items-start gap-1.5" data-testid="nested-card-summary">
-      <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1.5">
-        <ProgressLine segments={segments} />
-        {summary.cancelled > 0 && (
-          <span className="text-micro text-muted-foreground">
-            {t(($) => $.nested.cancelled, { n: summary.cancelled })}
-          </span>
-        )}
-      </div>
-      {summary.total > 0 && <NestedToggle expanded={expanded} onToggle={onToggle} />}
+    <div className="mt-1.5 space-y-0.5" data-testid="nested-card-summary">
+      <ProgressLine segments={segments} />
+      {(summary.cancelled > 0 || summary.total > 0) && (
+        <div className="flex items-center gap-1.5">
+          {summary.cancelled > 0 && (
+            <span className="text-micro text-muted-foreground">
+              {t(($) => $.nested.cancelled, { n: summary.cancelled })}
+            </span>
+          )}
+          {summary.total > 0 && (
+            <span className="ml-auto">
+              <NestedToggle expanded={expanded} onToggle={onToggle} />
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 }
