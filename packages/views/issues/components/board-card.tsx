@@ -33,7 +33,7 @@ import { CustomStatusChip, useIsCustomStatus } from "./custom-status-chip";
 import { IssueDuplicateOfMarker } from "./issue-duplicates";
 import { useIssueSurfaceActionsOptional } from "../surface/actions-context";
 import { useNestedIssue, type NestedIssue } from "./nested-board/use-nested-children";
-import { NestedCardControls, NestedCardSummary } from "./nested-board/card-summary";
+import { NestedCardSummary, NestedToggle } from "./nested-board/card-summary";
 import { NestedChildrenList } from "./nested-board/children-list";
 import { IssueAgentRunCounts } from "./issue-agent-run-counts";
 import {
@@ -126,8 +126,11 @@ export const BoardCardContent = memo(function BoardCardContent({
   // chip is the only thing in it and it decides to render nothing.
   const showCustomStatus = useIsCustomStatus(issue.status);
 
-  // Fork (PRD A): a parent card's "含 N 个已取消" and "展开" ride the meta row
-  // with the progress ring, so the one-line progress has a single row under it.
+  // Fork (PRD A): a parent card's "展开" and "含 N 个已取消" ride the meta row
+  // with the progress ring, usually one row under the one-line progress. The
+  // row wraps instead of hiding anything: the assignee name yields first, then
+  // whatever does not fit (the cancelled count, last) moves whole to a row
+  // below, right-aligned (PRD rule 7 keeps the count on the card).
   const showNestedControls = !!nested && nested.summary.total > 0;
   const showAssigneeName = showAssigneeSection && hasAssignee && !showStartDate && !showDueDate;
   const showUpdatedHint = showAssigneeName && !showChildProgress && !showNestedControls;
@@ -276,14 +279,19 @@ export const BoardCardContent = memo(function BoardCardContent({
 
       {/* Meta row: assignee (left), start date, due date, child progress (right) */}
       {showMetaRow && (
-        <div className="mt-2 flex items-center justify-between gap-2">
+        <div
+          className={`mt-2 flex items-center ${
+            showNestedControls ? "flex-wrap justify-end gap-x-2 gap-y-1" : "justify-between gap-2"
+          }`}
+        >
           {showAssigneeSection && (
             <div className={`${showNestedControls ? "min-w-5 basis-0" : "min-w-0"} flex-1`}>
               {assigneeNode}
             </div>
           )}
           {showRightMeta && (
-            <div className={`ml-auto flex items-center gap-2 ${showNestedControls ? "min-w-0" : "shrink-0"}`}>
+            // `contents` makes each piece its own item of the wrapping row.
+            <div className={showNestedControls ? "contents" : "ml-auto flex shrink-0 items-center gap-2"}>
               {showStartDate && (
                 canEdit ? (
                   <PickerWrapper className="flex shrink-0">
@@ -341,26 +349,23 @@ export const BoardCardContent = memo(function BoardCardContent({
                 )
               )}
               {showNestedControls && (
-                <NestedCardControls
-                  summary={nested!.summary}
-                  expanded={nested!.expanded}
-                  onToggle={nested!.onToggle}
-                />
+                <NestedToggle expanded={nested!.expanded} onToggle={nested!.onToggle} />
               )}
               {showChildProgress && (
-                <div
-                  className="inline-flex shrink-0 items-center gap-1"
-                  title={
-                    showNestedControls && nested!.summary.cancelled > 0
-                      ? t(($) => $.nested.cancelled, { n: nested!.summary.cancelled })
-                      : undefined
-                  }
-                >
+                <div className="inline-flex shrink-0 items-center gap-1">
                   <ProgressRing done={childProgress!.done} total={childProgress!.total} size={14} />
                   <span className="text-micro text-muted-foreground tabular-nums font-medium">
                     {childProgress!.done}/{childProgress!.total}
                   </span>
                 </div>
+              )}
+              {showNestedControls && nested!.summary.cancelled > 0 && (
+                <span
+                  className="shrink-0 whitespace-nowrap text-micro text-muted-foreground"
+                  data-testid="nested-cancelled"
+                >
+                  {t(($) => $.nested.cancelled, { n: nested!.summary.cancelled })}
+                </span>
               )}
               {showUpdatedHint && (
                 <span className="shrink-0 text-caption text-muted-foreground">

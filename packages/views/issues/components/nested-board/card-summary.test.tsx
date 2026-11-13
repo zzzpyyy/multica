@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { screen, within } from "@testing-library/react";
 import { buildIssueStatusCatalog } from "@multica/core/issue-statuses/queries";
-import { nestedSummary, progressSegments, BUILT_IN_STATUS_ORDER } from "@multica/core/issues";
+import { progressSegments, BUILT_IN_STATUS_ORDER } from "@multica/core/issues";
 import type { Issue } from "@multica/core/types";
 import { renderWithI18n } from "../../../test/i18n";
-import { NestedCardControls, NestedCardSummary } from "./card-summary";
+import { NestedCardSummary } from "./card-summary";
 
 vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "ws-1" }));
 vi.mock("@multica/core/issue-statuses/hooks", () => ({
@@ -155,13 +155,5 @@ describe("one-line progress, PRD v3.4 wording", () => {
     expect(progress.className).toContain("block");
     expect(screen.queryByText("含 1 个已取消")).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
-  });
-
-  it("a card without children has no expand toggle or cancelled count", () => {
-    const view = renderWithI18n(
-      <NestedCardControls summary={nestedSummary([])} expanded={false} onToggle={() => {}} />,
-      { locale: "zh-Hans" },
-    );
-    expect(view.container.innerHTML).toBe("");
   });
 });

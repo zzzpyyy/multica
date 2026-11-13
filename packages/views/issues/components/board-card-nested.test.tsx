@@ -7,10 +7,12 @@ import { renderWithI18n } from "../../test/i18n";
 import type { NestedIssue } from "./nested-board/use-nested-children";
 import { BoardCardContent } from "./board-card";
 
-// Fork (PRD A, 一鸣 13 Nov 12:02): on a parent card the one-line progress has
-// a single row under it, which carries "含 N 个已取消", "展开" and the ring.
-// A card without sub-issues looks as before. Widths are checked in a real
-// browser (BUNN-31); this pins which row each piece is in.
+// Fork (PRD A, 一鸣 13 Nov 12:02 and 13:24): on a parent card "展开", the ring
+// and "含 N 个已取消" join the meta row under the one-line progress. Short of
+// room the row wraps; nothing is hidden or cut, since PRD rule 7 keeps the
+// cancelled count on the card. A card without sub-issues looks as before.
+// jsdom has no layout: widths and wrapping are checked in a real browser
+// (BUNN-31); this pins the structure that makes them work.
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
   useQuery: () => ({ data: [] }),
@@ -65,7 +67,7 @@ function rowsUnderLine() {
 }
 
 describe("BoardCardContent on the nested board", () => {
-  it("a parent card has one row under its line: cancelled count, 展开 and the ring", () => {
+  it("a parent card has one meta row under its line: 展开, the ring, then the cancelled count", () => {
     renderWithI18n(<BoardCardContent issue={issue()} childProgress={{ done: 2, total: 5 }} nested={nestedP1()} />, {
       locale: "zh-Hans",
     });
@@ -76,6 +78,11 @@ describe("BoardCardContent on the nested board", () => {
     expect(row).toContainElement(screen.getByRole("button", { name: "展开" }));
     expect(row).toContainElement(screen.getByText("2/5"));
     expect(screen.getByTestId("nested-progress-line")).not.toContainElement(screen.getByText("含 1 个已取消"));
+    // The count comes last, so it is what wraps to the next row when space runs out.
+    const order = [screen.getByRole("button", { name: "展开" }), screen.getByText("2/5"), screen.getByText("含 1 个已取消")];
+    for (let i = 1; i < order.length; i++) {
+      expect(order[i - 1]!.compareDocumentPosition(order[i]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
   });
 
   it("keeps the assignee and due date on that same row", () => {
@@ -92,16 +99,16 @@ describe("BoardCardContent on the nested board", () => {
     expect(rows[0]).toContainElement(screen.getByTestId("avatar"));
     expect(rows[0]).toContainElement(screen.getByRole("button", { name: "展开" }));
     expect(rows[0]).toContainElement(screen.getByText("2/5"));
-    // Short of room the cancelled count wraps whole onto a clipped second line
-    // (never "含 …"), and the ring's title still says it.
+    // Short of room the row wraps, and the count moves down whole: it never
+    // shrinks, truncates or clips. The pieces are items of the wrapping row
+    // itself (their wrapper is `contents`), so each can move on its own.
+    expect(rows[0]!.className).toMatch(/\bflex-wrap\b/);
     const cancelled = screen.getByTestId("nested-cancelled");
-    expect(cancelled.className).toMatch(/\bh-lh\b/);
-    expect(cancelled.className).toMatch(/\bflex-wrap\b/);
-    expect(cancelled.className).toMatch(/\boverflow-hidden\b/);
-    expect(cancelled.className).not.toMatch(/truncate/);
-    // An empty first line would be 0 tall and leave the "clipped" line on screen.
-    expect(cancelled.firstElementChild?.className).toMatch(/\bh-lh\b/);
-    expect(screen.getByText("2/5").closest("[title]")).toHaveAttribute("title", "含 1 个已取消");
+    expect(cancelled.className).toMatch(/\bshrink-0\b/);
+    expect(cancelled.className).toMatch(/\bwhitespace-nowrap\b/);
+    expect(cancelled.className).not.toMatch(/truncate|overflow-hidden|h-lh|line-clamp/);
+    expect(cancelled.parentElement!.className).toBe("contents");
+    expect(cancelled.parentElement!.parentElement).toBe(rows[0]);
   });
 
   it("still shows 展开 when the ring is switched off in Display", () => {
