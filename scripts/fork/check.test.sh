@@ -94,5 +94,15 @@ ok $pub --artifacts "$tmp/clean"
 no $pub --artifacts "$tmp/ours"
 ok $pub --artifacts "$tmp/ours" --baseline-artifacts "$tmp/base" # same hit upstream
 no $pub --artifacts "$tmp/tok" --baseline-artifacts "$tmp/base"   # tokens never excused
+# A hit inside a binary, between NUL bytes (as in Electron Framework): the
+# same hit upstream must still excuse it.
+mkbin() { # <dir> <archive>
+  mkdir -p "$1/stage/Multica.app/Contents" && printf 'x\0%s\0y\0%s\0' "$ip" "${ip%.*}.9" >"$1/stage/Multica.app/Contents/app.bin"
+  (cd "$1/stage" && zip -qr "../$2" Multica.app) && rm -rf "$1/stage"
+}
+mkbin "$tmp/oursbin" Multica-1.0.0-fork.1-mac.zip
+mkbin "$tmp/basebin" Multica-1.0.0-mac.zip
+no $pub --artifacts "$tmp/oursbin"
+ok $pub --artifacts "$tmp/oursbin" --baseline-artifacts "$tmp/basebin"
 
 echo "scripts/fork: $pass checks passed"

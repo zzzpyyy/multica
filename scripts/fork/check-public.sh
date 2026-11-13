@@ -58,8 +58,12 @@ unpack() { # <src dir> <dest dir>
 
 # "<path inside the app or archive>\t<match>" for every hit of $2 under $1.
 # The path drops archive names and versions so ours and upstream's line up.
+# NUL bytes are dropped first: a match in a binary can start or end on one
+# (the [^0-9.] / [^0-9] edges of the IP rule), and bash drops them when the
+# hits go through $(...), which left ours unsorted and unequal to upstream's
+# in the comm below, so every such hit was reported as new.
 artifact_hits() {
-  { grep -a -r -o -i -H -E -- "$2" "$1" 2>/dev/null || true; } | awk -v n=$((${#1} + 2)) '{
+  { grep -a -r -o -i -H -E -- "$2" "$1" 2>/dev/null || true; } | tr -d '\000' | awk -v n=$((${#1} + 2)) '{
     i = index($0, ":"); p = substr($0, n, i - n); m = substr($0, i + 1)
     j = index(p, ".app/"); if (j) p = substr(p, j + 5); else sub(/^[^\/]*\//, "", p)
     print p "\t" m }' | sort -u
