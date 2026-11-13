@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useMemo, useState } from "react";
@@ -101,6 +102,7 @@ function ActorIssuesHeader({
         <IssueDisplayControls
           scopedIssues={issues}
           hideViewToggle
+          aggregates={false}
           facetCountsExact={facetCountsExact}
           tableFacetCounts={tableFacetCounts}
           onTableFacetChange={onTableFacetChange}

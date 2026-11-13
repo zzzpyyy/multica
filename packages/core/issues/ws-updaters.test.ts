@@ -1215,3 +1215,51 @@ describe("nested board children caches", () => {
     expectInvalidated(qc, childrenKey);
   });
 });
+
+// Fork (PRD A rule 7): the attention lists are refetched, never patched.
+describe("attention invalidation", () => {
+  const attentionKey = issueKeys.attention(WS_ID);
+  const seeded = () => {
+    const qc = new QueryClient();
+    qc.setQueryData(attentionKey, { awaiting_reply: [], in_review: [] });
+    return qc;
+  };
+  const isStale = (qc: QueryClient) => qc.getQueryState(attentionKey)?.isInvalidated;
+
+  it("A20, A34: a sub-issue created straight into in_review", () => {
+    const qc = seeded();
+    onIssueCreated(qc, WS_ID, { ...parentedIssue, status: "in_review" });
+    expect(isStale(qc)).toBe(true);
+  });
+
+  it("a new top-level issue cannot be waiting yet", () => {
+    const qc = seeded();
+    onIssueCreated(qc, WS_ID, baseIssue);
+    expect(isStale(qc)).toBe(false);
+  });
+
+  it("A7, A22: a status change", () => {
+    const qc = seeded();
+    onIssueUpdated(qc, WS_ID, { id: ISSUE_ID, status: "done" }, { statusChanged: true });
+    expect(isStale(qc)).toBe(true);
+  });
+
+  it("a title edit of an unlisted issue leaves it alone", () => {
+    const qc = seeded();
+    onIssueUpdated(qc, WS_ID, { id: ISSUE_ID, title: "renamed" }, { statusChanged: false });
+    expect(isStale(qc)).toBe(false);
+  });
+
+  it("any change to a listed issue, whose old parent no cache may know", () => {
+    const qc = new QueryClient();
+    qc.setQueryData(attentionKey, { awaiting_reply: [], in_review: [{ issue_id: ISSUE_ID, ancestor_ids: ["c1", "p3"] }] });
+    onIssueUpdated(qc, WS_ID, { id: ISSUE_ID, parent_issue_id: null }, { statusChanged: false });
+    expect(isStale(qc)).toBe(true);
+  });
+
+  it("a deletion", () => {
+    const qc = seeded();
+    onIssueDeleted(qc, WS_ID, ISSUE_ID);
+    expect(isStale(qc)).toBe(true);
+  });
+});

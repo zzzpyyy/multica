@@ -270,6 +270,7 @@ function BoardViewImpl({
   onCreateIssue,
   statusPagination,
   groupBranches,
+  nested = false,
 }: {
   issues: Issue[];
   visibleStatuses: IssueStatus[];
@@ -281,6 +282,8 @@ function BoardViewImpl({
   onCreateIssue?: (defaults: IssueCreateDefaults) => void;
   statusPagination?: IssueStatusPagination;
   groupBranches?: IssueGroupBranches;
+  /** Fork (PRD A): nest sub-issues in their parent's card. */
+  nested?: boolean;
 }) {
   const { t } = useT("issues");
   const storeGrouping = useViewStore((s) => s.grouping);
@@ -829,7 +832,7 @@ function BoardViewImpl({
 
   return (
     <BoardWorkflowContext.Provider value={boardWorkflow}>
-    <NestedBoardProvider issues={issues}>
+    <NestedBoardProvider issues={issues} enabled={nested}>
     <DndContext
       sensors={sensors}
       collisionDetection={collisionDetection}

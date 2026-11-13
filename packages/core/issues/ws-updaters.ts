@@ -25,6 +25,7 @@ import {
 import { cleanupDeletedIssueCaches } from "./delete-cache";
 import type {
   Issue,
+  IssueAttentionResponse,
   IssueLabelsResponse,
   IssueMetadata,
   IssuePropertyValues,
@@ -410,6 +411,8 @@ export function onIssueCreated(
   // page (if any) will refetch and pick it up if it qualifies.
   qc.invalidateQueries({ queryKey: issueKeys.projectGanttAll(wsId) });
   qc.invalidateQueries({ queryKey: issueKeys.sidebarAll(wsId) });
+  // Fork (PRD A20, A34): a sub-issue can be created straight into in_review.
+  if (issue.parent_issue_id) qc.invalidateQueries({ queryKey: issueKeys.attention(wsId) });
   if (issue.parent_issue_id) {
     qc.invalidateQueries({ queryKey: issueKeys.children(wsId, issue.parent_issue_id) });
     qc.invalidateQueries({ queryKey: issueKeys.childProgress(wsId) });
@@ -566,6 +569,17 @@ export function onIssueUpdated(
       qc.invalidateQueries({ queryKey: issueKeys.childProgress(wsId) });
     }
     qc.invalidateQueries({ queryKey: issueKeys.childrenByParentsAll(wsId) });
+  }
+  // Fork (PRD A rule 7): entering or leaving in_review, closing (a closed
+  // issue never waits for a reply) or moving under another parent changes
+  // the attention lists. Any change to a listed issue refetches too: its old
+  // parent may be one no cache knew (a grandchild), so parentChanged misses it.
+  const attention = qc.getQueryData<IssueAttentionResponse>(issueKeys.attention(wsId));
+  const listed = [...(attention?.in_review ?? []), ...(attention?.awaiting_reply ?? [])].some(
+    (item) => item.issue_id === issue.id,
+  );
+  if (changed.status || parentChanged || listed) {
+    qc.invalidateQueries({ queryKey: issueKeys.attention(wsId) });
   }
   reconcileIssueFullSnapshotRevision(qc, wsId, issue.id, issue.revision);
 }
@@ -812,6 +826,8 @@ export function onIssueDeleted(
   issueId: string,
 ) {
   cleanupDeletedIssueCaches(qc, wsId, issueId);
+  // Fork (PRD A rule 7): it may have been waiting on the viewer.
+  qc.invalidateQueries({ queryKey: issueKeys.attention(wsId) });
   // Deleting an original clears its duplicates' marks server-side.
   qc.invalidateQueries({ queryKey: issueKeys.duplicatesAll(wsId) });
   qc.invalidateQueries({ queryKey: issueKeys.assigneeGroupsAll(wsId) });

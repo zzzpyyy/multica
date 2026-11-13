@@ -1,6 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -1625,7 +1626,8 @@ describe("useIssueSurfaceController", () => {
       () =>
         useIssueSurfaceController({
           scope: { type: "project", projectId: "p1" },
-          modes: ["list"],
+          // Fork (PRD A rule 3): board and list ignore "Show sub-issues"; Table keeps it.
+          modes: ["table"],
         }),
       { wrapper: makeWrapper(qc, "project:p1") },
     );
@@ -1658,7 +1660,8 @@ describe("useIssueSurfaceController", () => {
       () =>
         useIssueSurfaceController({
           scope: { type: "project", projectId: "p1" },
-          modes: ["list"],
+          // Fork (PRD A rule 3): board and list ignore "Show sub-issues"; Table keeps it.
+          modes: ["table"],
         }),
       { wrapper: makeWrapper(qc, "project:p1") },
     );
@@ -1667,6 +1670,92 @@ describe("useIssueSurfaceController", () => {
 
     expect(result.current.tableQuerySpec.filters.include_sub_issues).toBe(false);
     await waitFor(() => expect(result.current.workingAgents).toEqual([]));
+  });
+
+  // Fork (PRD A rules 1–3, plan v2.3-A r3 §1.4).
+  describe("sub-issue aggregation", () => {
+    const render = (
+      mode: "board" | "list" | "table" | "swimlane",
+      scope: Parameters<typeof useIssueSurfaceController>[0]["scope"] = { type: "project", projectId: "p1" },
+      surfaceKey = "project:p1",
+    ) => {
+      mockListByStatus({ todo: [makeIssue({ id: "parent-1", status: "todo" })] });
+      return renderHook(() => useIssueSurfaceController({ scope, modes: [mode] }), {
+        wrapper: makeWrapper(qc, surfaceKey),
+      });
+    };
+
+    it.each(["board", "list"] as const)("%s aggregates and ignores Show sub-issues", async (mode) => {
+      act(() => getIssueSurfaceViewStore("project:p1").getState().toggleShowSubIssues());
+      const { result } = render(mode);
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      expect(result.current.aggregatesSubIssues).toBe(true);
+      expect(result.current.tableQuerySpec.filters.include_sub_issues).toBe(true);
+      expect(result.current.tableQuerySpec.filters.aggregate_sub_issues?.parent_statuses).toEqual(
+        expect.arrayContaining(["todo", "in_review"]),
+      );
+    });
+
+    it("A18: a hidden board column is not a parent status", async () => {
+      act(() => getIssueSurfaceViewStore("project:p1").getState().hideStatus("todo"));
+      const { result } = render("board");
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      const parents = result.current.tableQuerySpec.filters.aggregate_sub_issues?.parent_statuses;
+      expect(parents).not.toContain("todo");
+      expect(parents).toContain("in_review");
+    });
+
+    it("a collapsed list group still counts, so collapsing does not change the query", async () => {
+      const { result } = render("list");
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      const before = result.current.tableQuerySpec;
+      act(() => getIssueSurfaceViewStore("project:p1").getState().toggleListCollapsed("todo"));
+      expect(result.current.tableQuerySpec.filters.aggregate_sub_issues).toEqual(before.filters.aggregate_sub_issues);
+      expect(result.current.tableQuerySpec.filters.aggregate_sub_issues?.parent_statuses).toContain("todo");
+    });
+
+    it("a board grouped by assignee aggregates without parent statuses", async () => {
+      act(() => getIssueSurfaceViewStore("project:p1").getState().setGrouping("assignee"));
+      const { result } = render("board");
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      expect(result.current.tableQuerySpec.filters.aggregate_sub_issues).toEqual({});
+    });
+
+    it("A15: switched off, board and list show everything, still ignoring Show sub-issues", async () => {
+      const store = getIssueSurfaceViewStore("project:p1");
+      act(() => {
+        store.getState().toggleNestedSubIssues();
+        store.getState().toggleShowSubIssues();
+      });
+      const { result } = render("board");
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      expect(result.current.aggregatesSubIssues).toBe(false);
+      expect(result.current.tableQuerySpec.filters.aggregate_sub_issues).toBeUndefined();
+      expect(result.current.tableQuerySpec.filters.include_sub_issues).toBe(true);
+    });
+
+    it.each(["table", "swimlane"] as const)("%s neither aggregates nor ignores Show sub-issues", async (mode) => {
+      act(() => getIssueSurfaceViewStore("project:p1").getState().toggleShowSubIssues());
+      const { result } = render(mode);
+      await waitFor(() => expect(result.current.isLoading).toBe(false));
+      expect(result.current.aggregatesSubIssues).toBe(false);
+      expect(result.current.tableQuerySpec.filters.aggregate_sub_issues).toBeUndefined();
+      expect(result.current.tableQuerySpec.filters.include_sub_issues).toBe(false);
+    });
+
+    it("an actor page keeps the upstream board", async () => {
+      const surfaceKey = "actor:agent:agent-1:assigned";
+      act(() => getIssueSurfaceViewStore(surfaceKey).getState().toggleShowSubIssues());
+      const { result } = render(
+        "board",
+        { type: "actor", actorType: "agent", actorId: "agent-1", relation: "assigned" },
+        surfaceKey,
+      );
+      await waitFor(() => expect(listIssueTableRows).toHaveBeenCalled());
+      expect(result.current.aggregatesSubIssues).toBe(false);
+      expect(result.current.tableQuerySpec.filters.aggregate_sub_issues).toBeUndefined();
+      expect(result.current.tableQuerySpec.filters.include_sub_issues).toBe(false);
+    });
   });
 
   it.each(["table", "list", "board", "swimlane"] as const)("loads only the scoped working facet on an unfiltered %s surface", async (mode) => {

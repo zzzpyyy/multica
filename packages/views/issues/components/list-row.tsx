@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { memo, type Ref } from "react";
@@ -32,7 +33,10 @@ import {
   useIsIssuePeeked,
   useIssuePeekLinkProps,
 } from "../surface/peek-context";
-import { useLocale } from "../../i18n";
+import { useLocale, useT } from "../../i18n";
+import { useNestedIssue } from "./nested-board/use-nested-children";
+import { NestedToggle, ProgressLine } from "./nested-board/card-summary";
+import { NestedChildrenList } from "./nested-board/children-list";
 
 export interface ChildProgress {
   done: number;
@@ -63,6 +67,10 @@ function ListRowContent({
   checkboxProps?: Pick<React.HTMLAttributes<HTMLDivElement>, "onClick" | "onMouseDown" | "onPointerDown">;
 }) {
   const locale = useLocale();
+  const { t } = useT("issues");
+  // Fork (PRD A16): on an aggregating list the row carries what a nested
+  // board card does — ring, one-line progress, cancelled count, expand.
+  const { nested, progress: rowProgress } = useNestedIssue(issue, childProgress);
   const selection = useIssueSurfaceSelection();
   const peeked = useIsIssuePeeked(issue.id);
   const peekLinkProps = useIssuePeekLinkProps(issue.id);
@@ -79,13 +87,14 @@ function ListRowContent({
   const labels = issue.labels ?? [];
 
   const showProject = storeProperties.project && project;
-  const showChildProgress = storeProperties.childProgress && childProgress;
+  const showChildProgress = storeProperties.childProgress && rowProgress;
   const showAssignee = storeProperties.assignee && issue.assignee_type && issue.assignee_id;
   const showStartDate = storeProperties.startDate && issue.start_date;
   const showDueDate = storeProperties.dueDate && issue.due_date;
   const showLabels = storeProperties.labels && labels.length > 0;
 
   return (
+    <div>
     <IssueActionsContextMenu issue={issue}>
       <div
         ref={containerRef}
@@ -137,11 +146,22 @@ function ListRowContent({
             <IssueDuplicateOfMarker issue={issue} insideLink />
             {showChildProgress && (
               <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-muted/60 px-1.5 py-0.5">
-                <ProgressRing done={childProgress!.done} total={childProgress!.total} size={14} />
+                <ProgressRing done={rowProgress!.done} total={rowProgress!.total} size={14} />
                 <span className="text-micro text-muted-foreground tabular-nums font-medium">
-                  {childProgress!.done}/{childProgress!.total}
+                  {rowProgress!.done}/{rowProgress!.total}
                 </span>
               </span>
+            )}
+            {nested && nested.summary.cancelled > 0 && (
+              <span className="shrink-0 text-micro text-muted-foreground">
+                {t(($) => $.nested.cancelled, { n: nested.summary.cancelled })}
+              </span>
+            )}
+            {nested && (
+              <ProgressLine segments={nested.segments} className="min-w-0 shrink truncate" />
+            )}
+            {nested && nested.summary.total > 0 && (
+              <NestedToggle expanded={nested.expanded} onToggle={nested.onToggle} />
             )}
             {showLabels && (
               <span className="ml-1.5 hidden md:inline-flex shrink-0 items-center gap-1 max-w-[260px] overflow-hidden">
@@ -196,6 +216,10 @@ function ListRowContent({
         </AppLink>
       </div>
     </IssueActionsContextMenu>
+    {nested?.expanded && (
+      <NestedChildrenList parent={issue} groups={nested.summary.groups} variant="row" />
+    )}
+    </div>
   );
 }
 

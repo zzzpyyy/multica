@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import type { Issue, IssueMetadata, IssueStatus, IssueStatusCategory, IssuePriority, IssueAssigneeType } from "./issue";
 import type { IssuePropertyValues, PropertyFilterValue } from "./property";
 import type { MemberRole } from "./workspace";
@@ -386,6 +387,32 @@ export interface IssueTableFilters {
    *  (`/api/issues/unread`). An explicit empty list matches nothing. */
   unread_issue_ids?: string[];
   include_sub_issues?: boolean;
+  /**
+   * Fork (PRD A rule 2). Leave out an issue whose parent is itself in this
+   * list: the parent matches every other filter of this query and, when
+   * `parent_statuses` is given, has one of those statuses.
+   * Absent: no aggregation (upstream behavior).
+   */
+  aggregate_sub_issues?: {
+    /** The surface's visible status columns. Absent: any status the other
+     *  filters allow. Never empty. */
+    parent_statuses?: IssueStatus[];
+  };
+}
+
+/** An issue and its parent chain (fork, PRD A rule 7). */
+export interface IssueAttentionItem {
+  issue_id: string;
+  /** Parent chain, nearest first, up to the top-level issue. */
+  ancestor_ids: string[];
+}
+
+/** `GET /api/issues/attention` (fork, PRD A rule 7). Workspace-wide. */
+export interface IssueAttentionResponse {
+  /** Rule 7 "待你回复": issues waiting for the requester's reply. */
+  awaiting_reply: IssueAttentionItem[];
+  /** Rule 7 "待你验收": issues that have a parent and whose own status is "in_review". */
+  in_review: IssueAttentionItem[];
 }
 
 export type IssueTableSortField =

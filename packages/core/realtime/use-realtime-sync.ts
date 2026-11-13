@@ -1277,6 +1277,8 @@ export function useRealtimeSync(
       // updated_at, so the other comment events below deliberately do not.
       const wsId = getCurrentWsId();
       if (wsId) {
+        // Fork (PRD A rule 7): an @ or a reply moves "待你回复".
+        qc.invalidateQueries({ queryKey: issueKeys.attention(wsId) });
         invalidateUpdatedAtSortedIssueLists(qc, wsId);
         invalidateLastActivitySortedIssueLists(qc, wsId);
         // A comment carries only the aggregate owner revision, not a full
@@ -1296,6 +1298,8 @@ export function useRealtimeSync(
       invalidateTimeline(comment.issue_id);
       const wsId = getCurrentWsId();
       if (wsId) {
+        // Fork (PRD A rule 7): an edit can add or remove an @.
+        qc.invalidateQueries({ queryKey: issueKeys.attention(wsId) });
         invalidateLastActivitySortedIssueLists(qc, wsId);
         if (issue_revision) {
           onIssueAuxiliaryRevision(qc, wsId, comment.issue_id, issue_revision);
@@ -1311,6 +1315,8 @@ export function useRealtimeSync(
       invalidateTimeline(issue_id);
       const wsId = getCurrentWsId();
       if (wsId) {
+        // Fork (PRD A rule 7): a deleted @ or reply no longer counts.
+        qc.invalidateQueries({ queryKey: issueKeys.attention(wsId) });
         invalidateLastActivitySortedIssueLists(qc, wsId);
         if (issue_revision) {
           onIssueAuxiliaryRevision(qc, wsId, issue_id, issue_revision);

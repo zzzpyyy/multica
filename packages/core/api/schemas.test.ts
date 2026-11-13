@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { describe, expect, it } from "vitest";
 import {
   AgentTaskSchema,
@@ -2005,10 +2006,14 @@ describe("SidebarProjectPrefsDocSchema", () => {
   it("keeps every setting this client knows", () => {
     const doc = {
       projects: { ordering: "name", statuses: ["planned"], onlyMine: true, showCount: false },
-      issues: { sortBy: "priority", sortDirection: "asc", hiddenStatuses: ["done"], assignee: "me", showSubIssues: false },
+      issues: { sortBy: "priority", sortDirection: "asc", hiddenStatuses: ["done"], assignee: "me", aggregateSubIssues: false },
       order: ["p2", "p1"],
     };
     expect(SidebarProjectPrefsDocSchema.parse(doc)).toEqual(doc);
+  });
+
+  it("no longer reads upstream's showSubIssues (fork, PRD A19)", () => {
+    expect(SidebarProjectPrefsDocSchema.parse({ issues: { showSubIssues: false } }).issues).not.toHaveProperty("showSubIssues");
   });
 
   it.each(["anyone", "me", "my_agents", "me_and_my_agents"] satisfies SidebarIssueAssignee[])(
@@ -2021,7 +2026,7 @@ describe("SidebarProjectPrefsDocSchema", () => {
   it("drops settings saved by another client version instead of failing the document", () => {
     const parsed = SidebarProjectPrefsDocSchema.parse({
       projects: { ordering: "future-order", statuses: "planned", onlyMine: "no", showCount: true },
-      issues: { sortBy: "magic", sortDirection: "up", hiddenStatuses: null, assignee: 1, showSubIssues: "yes" },
+      issues: { sortBy: "magic", sortDirection: "up", hiddenStatuses: null, assignee: 1, aggregateSubIssues: "yes" },
       order: ["p1", 2, null],
     });
     expect(parsed.projects).toEqual({ ordering: undefined, statuses: undefined, onlyMine: undefined, showCount: true });
@@ -2030,7 +2035,7 @@ describe("SidebarProjectPrefsDocSchema", () => {
       sortDirection: undefined,
       hiddenStatuses: null,
       assignee: undefined,
-      showSubIssues: undefined,
+      aggregateSubIssues: undefined,
     });
     expect(parsed.order).toEqual(["p1"]);
   });

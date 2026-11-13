@@ -1,7 +1,7 @@
 // Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
-import { useCallback, useMemo, memo } from "react";
+import { useCallback, memo } from "react";
 import { AppLink } from "../../navigation";
 import { useSortable, defaultAnimateLayoutChanges } from "@dnd-kit/sortable";
 import type { AnimateLayoutChanges } from "@dnd-kit/sortable";
@@ -32,8 +32,7 @@ import { IssueAgentActivityIndicator } from "./issue-agent-activity-indicator";
 import { CustomStatusChip, useIsCustomStatus } from "./custom-status-chip";
 import { IssueDuplicateOfMarker } from "./issue-duplicates";
 import { useIssueSurfaceActionsOptional } from "../surface/actions-context";
-import { nestedSummary, type NestedSummary } from "@multica/core/issues";
-import { useNestedBoard } from "./nested-board/use-nested-children";
+import { useNestedIssue, type NestedIssue } from "./nested-board/use-nested-children";
 import { NestedCardSummary } from "./nested-board/card-summary";
 import { NestedChildrenList } from "./nested-board/children-list";
 import { IssueAgentRunCounts } from "./issue-agent-run-counts";
@@ -72,7 +71,7 @@ export const BoardCardContent = memo(function BoardCardContent({
   childProgress?: ChildProgress;
   project?: Project;
   /** Fork (PRD A): nested-board summary row and expand state. */
-  nested?: { summary: NestedSummary; expanded: boolean; onToggle: () => void };
+  nested?: NestedIssue;
 }) {
   const { t } = useT("issues");
   const locale = useLocale();
@@ -268,6 +267,7 @@ export const BoardCardContent = memo(function BoardCardContent({
       {nested && (
         <NestedCardSummary
           summary={nested.summary}
+          segments={nested.segments}
           expanded={nested.expanded}
           onToggle={nested.onToggle}
         />
@@ -379,28 +379,8 @@ export const DraggableBoardCard = memo(function DraggableBoardCard({
   disableSorting?: boolean;
 }) {
   const p = useWorkspacePaths();
-  const nestedBoard = useNestedBoard();
-  const nestedChildren = nestedBoard?.childrenOf(issue.id);
-  const summary = useMemo(
-    () => (nestedChildren ? nestedSummary(nestedChildren) : null),
-    [nestedChildren],
-  );
-  const expanded = !!summary && summary.total > 0 && !!nestedBoard?.isExpanded(issue.id);
-  const nested = useMemo(
-    () =>
-      summary && nestedBoard
-        ? { summary, expanded, onToggle: () => nestedBoard.toggleExpanded(issue.id) }
-        : undefined,
-    [summary, expanded, nestedBoard, issue.id],
-  );
-  // Nested board: the ring counts the same direct children the summary does
-  // (A13). Before the batch lands, fall back to the workspace progress query,
-  // which uses the same done + cancelled reading.
-  const cardProgress = summary
-    ? summary.total > 0
-      ? { done: summary.closed, total: summary.total }
-      : undefined
-    : childProgress;
+  const { nested, progress: cardProgress } = useNestedIssue(issue, childProgress);
+  const expanded = !!nested?.expanded;
   const peek = useIssuePeekActions();
   const peeked = useIsIssuePeeked(issue.id);
   const peekLinkProps = useIssuePeekLinkProps(issue.id);
@@ -462,7 +442,7 @@ export const DraggableBoardCard = memo(function DraggableBoardCard({
             nested={nested}
           />
         </AppLink>
-        {expanded && <NestedChildrenList parent={issue} groups={summary!.groups} />}
+        {expanded && <NestedChildrenList parent={issue} groups={nested!.summary.groups} />}
       </div>
     </IssueActionsContextMenu>
   );

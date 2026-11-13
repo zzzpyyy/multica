@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
@@ -35,6 +36,7 @@ import { filterDependencyState, statusCatalogSource } from "@multica/core/issues
 import { useIssueStatuses } from "@multica/core/issue-statuses/hooks";
 import { useSidebarProjectPrefs } from "@multica/core/issues/sidebar-project-prefs";
 import { useSidebarTreeStore } from "@multica/core/issues/stores/sidebar-tree-store";
+import { useIssueSurfaceLocalLayout } from "@multica/core/issues/stores/surface-view-store";
 import {
   myIssuesRelationFromScope,
   myIssuesScopeFor,
@@ -440,9 +442,11 @@ function UnreadViewRow({
   const unread = useIssueUnreadIds(wsId);
   const unreadDependency = filterDependencyState(true, [unread]);
   const count = unread.data?.length ?? 0;
+  // Fork (PRD A19): the source key is also the view's surface key.
+  const localLayout = useIssueSurfaceLocalLayout(source);
   const request = unreadDependency.unresolved
     ? undefined
-    : viewSidebarRequest(UNREAD_VIEW, todayDateOnly(), unread.data);
+    : viewSidebarRequest(UNREAD_VIEW, todayDateOnly(), unread.data, localLayout);
   const prefetch = usePrefetch(wsId, source, request);
   const label = t(($) => $.panels.work.unread);
 
@@ -555,9 +559,10 @@ function SavedViewRow({
   const needsUnread = viewSidebarNeedsUnread(view);
   const unread = useIssueUnreadIds(wsId, needsUnread);
   const unreadDependency = filterDependencyState(needsUnread, [unread]);
+  const localLayout = useIssueSurfaceLocalLayout(source);
   const request = unreadDependency.unresolved
     ? undefined
-    : viewSidebarRequest(view, todayDateOnly(), unread.data);
+    : viewSidebarRequest(view, todayDateOnly(), unread.data, localLayout);
   const prefetch = usePrefetch(wsId, source, request);
   const canManage = actions.canManage(view);
 

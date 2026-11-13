@@ -1,9 +1,13 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
+import { useStore } from "zustand";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { createWorkspaceAwareStorage, registerForWorkspaceRehydration } from "../../platform/workspace-storage";
 import { defaultStorage } from "../../platform/storage";
+import { useMemo } from "react";
+import type { SidebarViewLocalLayout } from "../sidebar-list";
 import {
   DEFAULT_CARD_PROPERTIES,
   DEFAULT_HIDDEN_STATUSES,
@@ -240,4 +244,19 @@ export function pruneIssueSurfaceViewStates(validSurfaceKeys: Iterable<string>) 
 
 export function getIssueSurfaceViewStateRegistrySnapshot() {
   return issueSurfaceViewRegistryStore.getState().surfaces;
+}
+
+/**
+ * Fork (PRD A19): the layout a saved surface opens with, as this device last
+ * left it — `undefined` fields where the surface has no local state yet. The
+ * sidebar lists a saved view the way opening it shows (sidebar-list.ts
+ * `viewSidebarRequest`); the view's `display` only seeds the first open.
+ */
+export function useIssueSurfaceLocalLayout(surfaceKey: string): SidebarViewLocalLayout {
+  const viewMode = useStore(issueSurfaceViewRegistryStore, (s) => s.surfaces[surfaceKey]?.state.viewMode);
+  const nestedSubIssues = useStore(
+    issueSurfaceViewRegistryStore,
+    (s) => s.surfaces[surfaceKey]?.state.nestedSubIssues,
+  );
+  return useMemo(() => ({ viewMode, nestedSubIssues }), [viewMode, nestedSubIssues]);
 }

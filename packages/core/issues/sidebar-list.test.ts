@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 import { describe, expect, it } from "vitest";
 import type { Project } from "../types";
 import {
@@ -24,29 +25,41 @@ const STATUSES = [
 ] as const;
 
 describe("projectSidebarRequest", () => {
+  // Fork (PRD A19): every setting is a table query, aggregated by default.
+  const AGG = { include_sub_issues: true, aggregate_sub_issues: {} };
   it("leaves out finished statuses and sorts by update time by default", () => {
     expect(projectSidebarRequest("p1", DEFAULT_SIDEBAR_ISSUE_SETTINGS, STATUSES, "u1")).toEqual({
-      project_id: "p1",
-      statuses: ["backlog", "todo", "in_progress", "merged"],
-      sort_by: "updated_at",
-      sort_direction: "desc",
+      table: {
+        scope: { kind: "project", project_id: "p1" },
+        filters: { statuses: ["backlog", "todo", "in_progress", "merged"], ...AGG },
+        sort: { field: "updated_at", direction: "desc" },
+      },
     });
   });
 
-  it("maps the assignee and sub-issue settings onto server filters", () => {
-    const settings: SidebarIssueSettings = {
-      ...DEFAULT_SIDEBAR_ISSUE_SETTINGS,
-      hiddenStatuses: [],
-      assignee: "my_agents",
-      showSubIssues: false,
-    };
+  it("lists my agents' issues in the project through the involved relation", () => {
+    const settings: SidebarIssueSettings = { ...DEFAULT_SIDEBAR_ISSUE_SETTINGS, hiddenStatuses: [], assignee: "my_agents" };
     expect(projectSidebarRequest("p1", settings, STATUSES, "u1")).toEqual({
-      project_id: "p1",
-      involves_user_id: "u1",
-      top_level_only: true,
-      sort_by: "updated_at",
-      sort_direction: "desc",
+      table: {
+        scope: { kind: "my", relation: "involved" },
+        filters: { project_ids: ["p1"], ...AGG },
+        sort: { field: "updated_at", direction: "desc" },
+      },
     });
+  });
+
+  it("lists my own issues through the assigned relation", () => {
+    const settings: SidebarIssueSettings = { ...DEFAULT_SIDEBAR_ISSUE_SETTINGS, hiddenStatuses: [], assignee: "me" };
+    expect(projectSidebarRequest("p1", settings, STATUSES, "u1")?.table).toMatchObject({
+      scope: { kind: "project", project_id: "p1" },
+      filters: { relations: ["assigned"], ...AGG },
+    });
+    expect(projectSidebarRequest("p1", settings, STATUSES, undefined)).toBeNull();
+  });
+
+  it("lists every issue when aggregation is off", () => {
+    const settings: SidebarIssueSettings = { ...DEFAULT_SIDEBAR_ISSUE_SETTINGS, hiddenStatuses: [], aggregateSubIssues: false };
+    expect(projectSidebarRequest("p1", settings, STATUSES, "u1")?.table.filters).toEqual({ include_sub_issues: true });
   });
 
   it("lists me and my agents through the table query, which can OR the two", () => {
@@ -57,7 +70,7 @@ describe("projectSidebarRequest", () => {
         filters: {
           statuses: ["backlog", "todo", "in_progress", "merged"],
           relations: ["assigned", "my_agents"],
-          include_sub_issues: true,
+          ...AGG,
         },
         sort: { field: "updated_at", direction: "desc" },
       },
@@ -81,7 +94,7 @@ describe("viewSidebarRequest", () => {
       viewSidebarRequest(
         {
           query: { statusFilters: ["todo"], labelFilters: ["l1"], priorityFilters: ["bogus"] },
-          display: { sortBy: "due_date", sortDirection: "desc", showSubIssues: false },
+          display: { sortBy: "due_date", sortDirection: "desc", showSubIssues: false, viewMode: "table" },
           scope_variant: "agents",
         },
         TODAY,
@@ -123,7 +136,7 @@ describe("viewSidebarRequest", () => {
       viewSidebarRequest({ ...workspace, query: {} }, TODAY, ["a"])?.table.filters,
     ).not.toHaveProperty("unread_issue_ids");
     // "Is not" with nothing selected is not a condition, and no due-date rule needs no day.
-    expect(filters({ negatedFilters: ["status"] })).toEqual({ include_sub_issues: true });
+    expect(filters({ negatedFilters: ["status"] })).toEqual({ include_sub_issues: true, aggregate_sub_issues: {} });
   });
 
   it("scopes project and my views like the page they open", () => {
@@ -149,12 +162,29 @@ describe("viewSidebarRequest", () => {
       { query: { projectFilters: ["p2"], negatedFilters: ["project"] }, display: {}, scope_type: "project", scope_id: "p1", scope_variant: null },
       TODAY,
     );
-    expect(project?.table.filters).toEqual({ include_sub_issues: true });
+    expect(project?.table.filters).toEqual({ include_sub_issues: true, aggregate_sub_issues: {} });
     const mine = viewSidebarRequest(
       { query: { relationFilters: ["created"] }, display: {}, scope_type: "my", scope_id: null, scope_variant: "assigned" },
       TODAY,
     );
-    expect(mine?.table.filters).toEqual({ include_sub_issues: true });
+    expect(mine?.table.filters).toEqual({ include_sub_issues: true, aggregate_sub_issues: {} });
+  });
+
+  // Fork (PRD A19, r3 §1.4): the sidebar aggregates a view when opening it does.
+  it("aggregates like the view opens: local layout first, then display", () => {
+    const view = { ...workspace, query: {} };
+    const sub = (display: Record<string, unknown>, local?: Parameters<typeof viewSidebarRequest>[3]) => {
+      const f = viewSidebarRequest({ ...view, display }, TODAY, [], local)?.table.filters;
+      return { include: f?.include_sub_issues, aggregate: f?.aggregate_sub_issues };
+    };
+    const on = { include: true, aggregate: {} };
+    expect(sub({})).toEqual(on);
+    expect(sub({ viewMode: "list" })).toEqual(on);
+    expect(sub({ viewMode: "table", showSubIssues: false })).toEqual({ include: false, aggregate: undefined });
+    // Switched to a table on this device: the view opens unaggregated.
+    expect(sub({ viewMode: "board" }, { viewMode: "table" })).toEqual({ include: true, aggregate: undefined });
+    expect(sub({ viewMode: "table" }, { viewMode: "board" })).toEqual(on);
+    expect(sub({ viewMode: "board" }, { viewMode: "board", nestedSubIssues: false })).toEqual({ include: true, aggregate: undefined });
   });
 });
 
@@ -164,7 +194,7 @@ describe("builtinSidebarRequest", () => {
       builtinSidebarRequest(builtin, relation, DEFAULT_SIDEBAR_ISSUE_SETTINGS, STATUSES)?.table;
     expect(request("all_issues")).toEqual({
       scope: { kind: "workspace" },
-      filters: { statuses: ["backlog", "todo", "in_progress", "merged"], include_sub_issues: true },
+      filters: { statuses: ["backlog", "todo", "in_progress", "merged"], include_sub_issues: true, aggregate_sub_issues: {} },
       sort: { field: "updated_at", direction: "desc" },
     });
     expect(request("my_issues", "created")?.scope).toEqual({ kind: "my", relation: "created" });
@@ -177,10 +207,17 @@ describe("builtinSidebarRequest", () => {
     expect(builtinSidebarRequest("all_issues", "assigned", mine, STATUSES)?.table.filters).toEqual({
       relations: ["my_agents"],
       include_sub_issues: true,
+      aggregate_sub_issues: {},
     });
     const both = { ...mine, assignee: "me_and_my_agents" as const };
     expect(builtinSidebarRequest("all_issues", "assigned", both, STATUSES)?.table.filters).toEqual({
       relations: ["assigned", "my_agents"],
+      include_sub_issues: true,
+      aggregate_sub_issues: {},
+    });
+    const off = { ...mine, aggregateSubIssues: false };
+    expect(builtinSidebarRequest("all_issues", "assigned", off, STATUSES)?.table.filters).toEqual({
+      relations: ["my_agents"],
       include_sub_issues: true,
     });
     const none = { ...DEFAULT_SIDEBAR_ISSUE_SETTINGS, hiddenStatuses: STATUSES.map((s) => s.key) };

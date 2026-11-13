@@ -160,6 +160,12 @@ export const issueKeys = {
     [...issueKeys.childrenByParentsAll(wsId), parentIds] as const,
   childProgress: (wsId: string) =>
     [...issueKeys.all(wsId), "child-progress"] as const,
+  /** Fork (PRD A rule 7): `GET /api/issues/attention`. Under `all` so a
+   *  reconnect or workspace refresh refetches it with the board (A11).
+   *  Refetched, never patched — the server decides who waits on a reply —
+   *  on comment created/updated/deleted and on an issue created, deleted,
+   *  or changing status or parent (ws-updaters, use-realtime-sync). */
+  attention: (wsId: string) => [...issueKeys.all(wsId), "attention"] as const,
   /** Prefix for every issue's role-instance query (fork, PRD D). Any task:*
    *  or daemon:register event invalidates all of them: queue position and
    *  reason move with other issues' tasks and runtime state. */

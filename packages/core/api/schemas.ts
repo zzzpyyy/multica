@@ -744,7 +744,8 @@ export const SidebarProjectPrefsDocSchema = z.object({
     sortDirection: z.enum(["asc", "desc"]).optional().catch(undefined),
     hiddenStatuses: z.array(z.string()).nullable().optional().catch(undefined),
     assignee: z.enum(["anyone", "me", "my_agents", "me_and_my_agents"]).optional().catch(undefined),
-    showSubIssues: z.boolean().optional().catch(undefined),
+    // Fork (PRD A): replaces `showSubIssues`, which is no longer read.
+    aggregateSubIssues: z.boolean().optional().catch(undefined),
   }).catch({}),
   order: z.array(z.unknown()).catch([]).transform((ids) => ids.filter((id): id is string => typeof id === "string")),
 });
@@ -1829,6 +1830,16 @@ export const ChildIssueProgressResponseSchema = z.object({
         .loose(),
     )
     .default([]),
+}).loose();
+
+// Fork (PRD A rule 7): issues waiting on the viewer, with their parent chains.
+const IssueAttentionItemSchema = z
+  .object({ issue_id: z.string(), ancestor_ids: z.array(z.string()).default([]) })
+  .loose();
+
+export const IssueAttentionResponseSchema = z.object({
+  awaiting_reply: z.array(IssueAttentionItemSchema).default([]),
+  in_review: z.array(IssueAttentionItemSchema).default([]),
 }).loose();
 
 // Role instances (fork, PRD D). Status and reason stay open strings so a

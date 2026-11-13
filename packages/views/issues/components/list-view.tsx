@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useIssueStatuses } from "@multica/core/issue-statuses/hooks";
@@ -24,6 +25,7 @@ import type { Issue, IssueStatus, Project } from "@multica/core/types";
 import { useViewStore } from "@multica/core/issues/stores/view-store-context";
 import { StatusHeading } from "./status-heading";
 import { ListRow, DraggableListRow, type ChildProgress } from "./list-row";
+import { NestedBoardProvider } from "./nested-board/use-nested-children";
 import { useDragSettle } from "./use-drag-settle";
 import { ListLoadMoreFooter } from "./list-load-more-footer";
 import { useT } from "../../i18n";
@@ -81,6 +83,7 @@ function ListViewImpl({
   projectId,
   onMoveIssue,
   onCreateIssue,
+  nested = false,
 }: {
   issues: Issue[];
   visibleStatuses: IssueStatus[];
@@ -90,6 +93,8 @@ function ListViewImpl({
   projectId?: string;
   onMoveIssue?: (issueId: string, updates: DragMoveUpdates, onSettled?: () => void) => void;
   onCreateIssue?: (defaults: IssueCreateDefaults) => void;
+  /** Fork (PRD A16): nest sub-issues under their parent's row. */
+  nested?: boolean;
 }) {
   const listCollapsedStatuses = useViewStore(
     (s) => s.listCollapsedStatuses
@@ -426,13 +431,16 @@ function ListViewImpl({
 
   if (!dragEnabled) {
     return (
-      <div ref={attachScroller} data-tab-scroll-root="list" className="flex-1 min-h-0 overflow-y-auto p-2 pt-0">
-        {content}
-      </div>
+      <NestedBoardProvider issues={issues} enabled={nested}>
+        <div ref={attachScroller} data-tab-scroll-root="list" className="flex-1 min-h-0 overflow-y-auto p-2 pt-0">
+          {content}
+        </div>
+      </NestedBoardProvider>
     );
   }
 
   return (
+    <NestedBoardProvider issues={issues} enabled={nested}>
     <DndContext
       sensors={sensors}
       collisionDetection={collisionDetection}
@@ -454,6 +462,7 @@ function ListViewImpl({
         ) : null}
       </DragOverlay>
     </DndContext>
+    </NestedBoardProvider>
   );
 }
 

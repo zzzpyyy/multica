@@ -23,9 +23,12 @@ import { useIssuePeekLinkProps } from "../../surface/peek-context";
 export function NestedChildrenList({
   parent,
   groups,
+  variant = "card",
 }: {
   parent: Issue;
   groups: NestedChildGroup[];
+  /** "card": the board card's lower half. "row": indented under a list row. */
+  variant?: "card" | "row";
 }) {
   const { t } = useT("issues");
   const wsId = useWorkspaceId();
@@ -40,7 +43,11 @@ export function NestedChildrenList({
       onPointerDown={stop}
       onKeyDown={stop}
       onContextMenu={stop}
-      className="-mt-px rounded-b-lg border-[0.5px] border-t-0 border-surface-border bg-surface px-2.5 pb-2 shadow-[var(--surface-shadow)]"
+      className={
+        variant === "card"
+          ? "-mt-px rounded-b-lg border-[0.5px] border-t-0 border-surface-border bg-surface px-2.5 pb-2 shadow-[var(--surface-shadow)]"
+          : "ml-14 mr-4 mb-1 border-l border-border pl-3 pb-1"
+      }
     >
       {groups.map((group) => (
         <div key={group.stage ?? "none"} className="border-t border-border/60 pt-1.5 first:border-t-0">

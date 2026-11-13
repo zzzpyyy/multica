@@ -248,6 +248,7 @@ import type {
   CreateCommentSubIssueManualRequest,
   CreateCommentSubIssueAgentRequest,
   CreateCommentSubIssueRequest,
+  IssueAttentionResponse,
 } from "../types";
 import type { OnboardingCompletionPath } from "../onboarding/types";
 import type {
@@ -284,6 +285,7 @@ import {
   ChildIssuesResponseSchema,
   IssueDuplicatesResponseSchema,
   ChildIssueProgressResponseSchema,
+  IssueAttentionResponseSchema,
   ListInstancesResponseSchema,
   CommentsListSchema,
   CommentTriggerPreviewSchema,
@@ -1663,6 +1665,17 @@ export class ApiClient {
       ChildIssueProgressResponseSchema,
       { progress: [] },
       { endpoint: "GET /api/issues/child-progress" },
+    );
+  }
+
+  /** Issues waiting on the viewer and their parent chains (fork, PRD A rule 7). */
+  async getIssueAttention(): Promise<IssueAttentionResponse> {
+    const raw = await this.fetch<unknown>("/api/issues/attention");
+    return parseWithFallback(
+      raw,
+      IssueAttentionResponseSchema,
+      { awaiting_reply: [], in_review: [] },
+      { endpoint: "GET /api/issues/attention" },
     );
   }
 

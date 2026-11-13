@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useMemo, useState } from "react";
@@ -246,6 +247,7 @@ function MemberIssueTools({
       <IssueDisplayControls
         scopedIssues={controller.surfaceIssues}
         hideViewToggle
+        aggregates={false}
         hideFilter
         iconOnly
         facetCountsExact={controller.facetCountsExact}

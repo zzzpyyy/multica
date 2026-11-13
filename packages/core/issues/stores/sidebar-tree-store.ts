@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { create } from "zustand";
@@ -16,7 +17,12 @@ export interface SidebarIssueSettings {
   /** Status keys left out; `null` leaves out every finished (done / closed) status. */
   hiddenStatuses: string[] | null;
   assignee: SidebarIssueAssignee;
-  showSubIssues: boolean;
+  /**
+   * Fork (PRD A rules 1–3): leave out an issue whose parent is in the same
+   * list. Off lists every issue. Replaces upstream's `showSubIssues`; a saved
+   * `showSubIssues` is no longer read.
+   */
+  aggregateSubIssues: boolean;
 }
 
 export const DEFAULT_SIDEBAR_ISSUE_SETTINGS: SidebarIssueSettings = {
@@ -24,7 +30,7 @@ export const DEFAULT_SIDEBAR_ISSUE_SETTINGS: SidebarIssueSettings = {
   sortDirection: "desc",
   hiddenStatuses: null,
   assignee: "anyone",
-  showSubIssues: true,
+  aggregateSubIssues: true,
 };
 
 export type SidebarProjectOrdering = "manual" | "name" | "updated" | "created";

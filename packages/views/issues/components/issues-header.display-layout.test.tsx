@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, screen, within } from "@testing-library/react";
@@ -19,7 +20,7 @@ vi.mock("@multica/core/hooks", () => ({
 }));
 
 function renderDisplay(
-  props: { allowGantt?: boolean } = {},
+  props: { allowGantt?: boolean; aggregates?: boolean } = {},
   setup: (store: StoreApi<IssueViewState>) => void = () => {},
 ) {
   setApiInstance(
@@ -80,5 +81,26 @@ describe("Display layout", () => {
     expect(screen.getAllByRole("combobox", { name: "Grouping" })).toHaveLength(1);
     expect(screen.getByRole("button", { name: /shown$/ })).toBeInTheDocument();
     expect(screen.getByText("Hierarchy")).toBeInTheDocument();
+  });
+
+  // Fork (PRD A rules 1, 3; plan v2.3-A r3 §5): board and list show
+  // "Aggregate sub-issues" instead of "Show sub-issues"; other layouts and
+  // actor pages keep the upstream switch. Run after every upstream merge.
+  it.each(["board", "list"] as const)("%s: Aggregate sub-issues replaces Show sub-issues", async (mode) => {
+    renderDisplay({}, (s) => s.getState().setViewMode(mode));
+    expect(await screen.findByText("Aggregate sub-issues")).toBeInTheDocument();
+    expect(screen.queryByText("Show sub-issues")).toBeNull();
+  });
+
+  it.each(["swimlane", "table"] as const)("%s keeps Show sub-issues", async (mode) => {
+    renderDisplay({}, (s) => s.getState().setViewMode(mode));
+    expect(await screen.findByText("Show sub-issues")).toBeInTheDocument();
+    expect(screen.queryByText("Aggregate sub-issues")).toBeNull();
+  });
+
+  it("an actor page never aggregates", async () => {
+    renderDisplay({ aggregates: false }, (s) => s.getState().setViewMode("board"));
+    expect(await screen.findByText("Show sub-issues")).toBeInTheDocument();
+    expect(screen.queryByText("Aggregate sub-issues")).toBeNull();
   });
 });

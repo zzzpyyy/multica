@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { SlidersHorizontal } from "@multica/ui/icons";
@@ -237,10 +238,11 @@ function ProjectIssuesGroup({
           className="w-44"
         />
       </Field>
+      {/* Fork (PRD A rule 3): "Aggregate sub-issues" replaces "Show sub-issues". */}
       <SwitchField
-        label={ti(($) => $.display.show_sub_issues)}
-        checked={settings.showSubIssues}
-        onChange={(showSubIssues) => update({ showSubIssues })}
+        label={ti(($) => $.display.nested_sub_issues)}
+        checked={settings.aggregateSubIssues}
+        onChange={(aggregateSubIssues) => update({ aggregateSubIssues })}
       />
     </section>
   );

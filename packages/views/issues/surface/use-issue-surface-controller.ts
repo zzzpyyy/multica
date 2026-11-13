@@ -9,6 +9,7 @@ import type {
   IssueStatus,
   IssueTableFacetSpec,
   IssueTableFacetsResponse,
+  IssueTableFilters,
   IssueTableGroupsRequest,
   IssueTableNegatableFilter,
   IssueTableQuerySpec,
@@ -106,6 +107,8 @@ export interface IssueSurfaceController {
   projectId?: string;
   createDefaults: IssueCreateDefaults;
   viewMode: IssueSurfaceMode;
+  /** Fork (PRD A rules 1–3): board and list nest sub-issues in their parent. */
+  aggregatesSubIssues: boolean;
   allowGantt: boolean;
   surfaceIssues: Issue[];
   projectIssues: Issue[];
@@ -373,10 +376,16 @@ export function useIssueSurfaceController({
   const effectiveViewMode = allowedModes.has(viewMode as IssueSurfaceMode)
     ? (viewMode as IssueSurfaceMode)
     : fallbackMode;
-  // Fork (PRD A1): the nested board holds top-level issues only; sub-issues
-  // live inside their parent's card whatever "Show sub-issues" says.
-  const showSubIssues =
-    showSubIssuesSetting && !(nestedSubIssues && effectiveViewMode === "board");
+  // Fork (PRD A rules 1–3, plan v2.3-A r3 §1.4). Board and list aggregate,
+  // except on actor pages: a sub-issue whose parent is in the same list lives
+  // inside the parent's card or row. The server decides membership
+  // (`aggregate_sub_issues`), so board and list always ask for sub-issues and
+  // "Show sub-issues" no longer touches them. Actor pages, swimlane, table and
+  // Gantt keep the upstream behavior.
+  const aggregationSurface =
+    scope.type !== "actor" && (effectiveViewMode === "board" || effectiveViewMode === "list");
+  const aggregatesSubIssues = aggregationSurface && nestedSubIssues;
+  const showSubIssues = aggregationSurface || showSubIssuesSetting;
 
   useEffect(() => {
     if (!allowedModes.has(viewMode as IssueSurfaceMode)) {
@@ -481,9 +490,9 @@ export function useIssueSurfaceController({
 
   // Display preferences hide individual columns; status filters independently
   // select exact keys. Selecting a key explicitly restores its hidden column.
-  const serverStatuses = useMemo<IssueStatus[]>(
-    () => {
-      const visible = workflowColumns(
+  const shownStatuses = useMemo<IssueStatus[]>(
+    () =>
+      workflowColumns(
         visibleStatusKeys(
           columnStatus.statuses,
           columnStatus.hiddenStatuses,
@@ -491,19 +500,26 @@ export function useIssueSurfaceController({
           columnStatus.negated,
         ),
         projectWorkflow,
-      );
-      return effectiveViewMode === "list"
-        ? visible.filter((status) => !listCollapsedStatuses.includes(status))
-        : visible;
-    },
-    [
-      effectiveViewMode,
-      listCollapsedStatuses,
-      catalog,
-      columnStatus,
-      projectWorkflow,
-    ],
+      ),
+    [catalog, columnStatus, projectWorkflow],
   );
+  const serverStatuses = useMemo<IssueStatus[]>(
+    () =>
+      effectiveViewMode === "list"
+        ? shownStatuses.filter((status) => !listCollapsedStatuses.includes(status))
+        : shownStatuses,
+    [effectiveViewMode, listCollapsedStatuses, shownStatuses],
+  );
+  // Fork (PRD A18): a parent in a hidden column is not "in the list", so the
+  // statuses a parent may have are the shown columns. A collapsed list group
+  // still counts (r3 §7 ①): collapsing must not change the query. Columns
+  // that are not statuses (assignee, project, property) hide no status.
+  const aggregation = useMemo<IssueTableFilters["aggregate_sub_issues"]>(() => {
+    if (!aggregatesSubIssues) return undefined;
+    const byStatus =
+      effectiveViewMode === "list" || effectiveGrouping === "status";
+    return byStatus && shownStatuses.length > 0 ? { parent_statuses: shownStatuses } : {};
+  }, [aggregatesSubIssues, effectiveGrouping, effectiveViewMode, shownStatuses]);
 
   const projectFilterState = useMemo(
     () => ({
@@ -669,6 +685,7 @@ export function useIssueSurfaceController({
           ? { unread_issue_ids: [...unreadIssueIDs].sort() }
           : {}),
         include_sub_issues: showSubIssues,
+        ...(aggregation ? { aggregate_sub_issues: aggregation } : {}),
       },
       ...(debouncedActiveSearch ? { search: debouncedActiveSearch } : {}),
       sort: {
@@ -679,6 +696,7 @@ export function useIssueSurfaceController({
   }, [
     advancedTableFilter,
     agentRunningFilter,
+    aggregation,
     assigneeFilters,
     creatorFilters,
     dateParams,
@@ -891,12 +909,14 @@ export function useIssueSurfaceController({
         agentRunningFilter,
         unreadFilter,
         showSubIssues,
+        aggregation,
         dateParams,
         debouncedActiveSearch,
       ]),
     [
       advancedTableFilter,
       agentRunningFilter,
+      aggregation,
       unreadFilter,
       assigneeFilters,
       creatorFilters,
@@ -1067,6 +1087,7 @@ export function useIssueSurfaceController({
     projectId,
     createDefaults: resolvedCreateDefaults,
     viewMode: effectiveViewMode,
+    aggregatesSubIssues,
     allowGantt: allowedModes.has("gantt") && !!projectId,
     ...surfaceData,
     isLoading: data.isLoading || workingDependency.pending || unreadDependency.pending,

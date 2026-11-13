@@ -1807,9 +1807,13 @@ export function IssueDisplayControls({
   viewBaseline,
   hideFilter = false,
   iconOnly = false,
+  aggregates = true,
 }: {
   scopedIssues: Issue[];
   hideViewToggle?: boolean;
+  /** Fork (PRD A rule 1): this surface's board and list aggregate sub-issues.
+   *  False on actor pages, which keep "Show sub-issues" everywhere. */
+  aggregates?: boolean;
   /** The host renders its own filter trigger (the view header's chip row). */
   hideFilter?: boolean;
   /** A ghost icon button named only by its tooltip, for the issue view header. */
@@ -2003,6 +2007,7 @@ export function IssueDisplayControls({
           : t(($) => $.table.group_none);
   // A Gantt layout persisted on a surface without Gantt renders as List.
   const layout: ViewMode = viewMode === "gantt" && !allowGantt ? "list" : viewMode;
+  const aggregationLayout = aggregates && (layout === "board" || layout === "list");
   const layouts = LAYOUTS.filter(({ mode }) => mode !== "gantt" || allowGantt);
   const LayoutIcon = hideViewToggle
     ? SlidersHorizontal
@@ -2264,6 +2269,9 @@ export function IssueDisplayControls({
                   </Select>
                 </div>
               </div>
+              {/* Fork (PRD A rule 3): board and list ignore "Show sub-issues";
+                  the upstream switch is wrapped, not removed, to merge cleanly. */}
+              {!aggregationLayout && (
               <label className="flex cursor-pointer items-center justify-between gap-3">
                 <span className="text-caption font-medium text-muted-foreground">
                   {t(($) => $.display.show_sub_issues)}
@@ -2274,7 +2282,8 @@ export function IssueDisplayControls({
                   onCheckedChange={() => act.toggleShowSubIssues()}
                 />
               </label>
-              {layout === "board" && (
+              )}
+              {aggregationLayout && (
                 <label className="flex cursor-pointer items-center justify-between gap-3">
                   <span className="text-caption font-medium text-muted-foreground">
                     {t(($) => $.display.nested_sub_issues)}

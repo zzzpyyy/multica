@@ -1,3 +1,4 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
@@ -354,6 +355,7 @@ function IssueSurfaceContent({
                 onCreateIssue={openCreateIssue}
                 statusPagination={controller.statusPagination}
                 groupBranches={controller.groupBranches}
+                nested={controller.aggregatesSubIssues}
               />
             )}
             {controller.viewMode === "list" && (
@@ -366,6 +368,7 @@ function IssueSurfaceContent({
                 onMoveIssue={controller.moveIssue}
                 onCreateIssue={openCreateIssue}
                 statusPagination={controller.statusPagination!}
+                nested={controller.aggregatesSubIssues}
               />
             )}
             {controller.viewMode === "table" && (
