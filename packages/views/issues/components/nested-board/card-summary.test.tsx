@@ -4,7 +4,7 @@ import { buildIssueStatusCatalog } from "@multica/core/issue-statuses/queries";
 import { nestedSummary, progressSegments, BUILT_IN_STATUS_ORDER } from "@multica/core/issues";
 import type { Issue } from "@multica/core/types";
 import { renderWithI18n } from "../../../test/i18n";
-import { NestedCardSummary } from "./card-summary";
+import { NestedCardControls, NestedCardSummary } from "./card-summary";
 
 vi.mock("@multica/core/hooks", () => ({ useWorkspaceId: () => "ws-1" }));
 vi.mock("@multica/core/issue-statuses/hooks", () => ({
@@ -28,7 +28,7 @@ function line(
     ...attention,
   });
   const view = renderWithI18n(
-    <NestedCardSummary summary={nestedSummary(children)} segments={segments} expanded={false} onToggle={() => {}} />,
+    <NestedCardSummary segments={segments} />,
     { locale: "zh-Hans" },
   );
   const text = screen.queryByTestId("nested-progress-line")?.textContent ?? null;
@@ -117,7 +117,7 @@ describe("one-line progress, PRD v3.4 wording", () => {
       awaitingReply: 1,
     });
     renderWithI18n(
-      <NestedCardSummary summary={nestedSummary(p5())} segments={segments} expanded={false} onToggle={() => {}} />,
+      <NestedCardSummary segments={segments} />,
       { locale: "zh-Hans" },
     );
     expect(screen.getByText("1 项待你验收").className).toContain("text-warning");
@@ -128,7 +128,8 @@ describe("one-line progress, PRD v3.4 wording", () => {
   // The layout fix of 13 Nov: P1's line had wrapped mid-word ("接 / 口联调",
   // "1 项 / 待你验收") on the row it shared with the cancelled count and
   // "展开". Each segment is now an unbreakable-unless-it-must inline-block on
-  // lines of its own; a real browser check of the widths is in BUNN-31.
+  // lines of its own; a real browser check of the widths is in BUNN-31. Where
+  // the cancelled count and "展开" went is tested in board-card-nested.test.tsx.
   it("puts the line on rows of its own, one inline-block per segment, nothing truncated", () => {
     const children = p1();
     const segments = progressSegments(children, {
@@ -137,7 +138,7 @@ describe("one-line progress, PRD v3.4 wording", () => {
       awaitingReview: 1,
     });
     renderWithI18n(
-      <NestedCardSummary summary={nestedSummary(children)} segments={segments} expanded={false} onToggle={() => {}} />,
+      <NestedCardSummary segments={segments} />,
       { locale: "zh-Hans" },
     );
     const progress = screen.getByTestId("nested-progress-line");
@@ -152,26 +153,15 @@ describe("one-line progress, PRD v3.4 wording", () => {
     expect(within(parts[3]!).getByText("1 项待你验收").className).toContain("text-warning");
     expect(progress.className).not.toMatch(/truncate|line-clamp|ellipsis|nowrap/);
     expect(progress.className).toContain("block");
-
-    const cancelled = screen.getByText("含 1 个已取消");
-    const toggle = screen.getByRole("button", { name: "展开" });
-    expect(progress).not.toContainElement(cancelled);
-    expect(progress).not.toContainElement(toggle);
-    // The cancelled count and the toggle share the row after the line, not its row.
-    expect(progress.nextElementSibling).toContainElement(cancelled);
-    expect(progress.nextElementSibling).toContainElement(toggle);
+    expect(screen.queryByText("含 1 个已取消")).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
   });
 
-  it("a card without children has no expand toggle", () => {
-    renderWithI18n(
-      <NestedCardSummary
-        summary={nestedSummary([])}
-        segments={[{ kind: "awaiting_reply", n: 1 }]}
-        expanded={false}
-        onToggle={() => {}}
-      />,
+  it("a card without children has no expand toggle or cancelled count", () => {
+    const view = renderWithI18n(
+      <NestedCardControls summary={nestedSummary([])} expanded={false} onToggle={() => {}} />,
       { locale: "zh-Hans" },
     );
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(view.container.innerHTML).toBe("");
   });
 });

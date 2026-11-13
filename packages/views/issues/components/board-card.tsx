@@ -33,7 +33,7 @@ import { CustomStatusChip, useIsCustomStatus } from "./custom-status-chip";
 import { IssueDuplicateOfMarker } from "./issue-duplicates";
 import { useIssueSurfaceActionsOptional } from "../surface/actions-context";
 import { useNestedIssue, type NestedIssue } from "./nested-board/use-nested-children";
-import { NestedCardSummary } from "./nested-board/card-summary";
+import { NestedCardControls, NestedCardSummary } from "./nested-board/card-summary";
 import { NestedChildrenList } from "./nested-board/children-list";
 import { IssueAgentRunCounts } from "./issue-agent-run-counts";
 import {
@@ -126,8 +126,11 @@ export const BoardCardContent = memo(function BoardCardContent({
   // chip is the only thing in it and it decides to render nothing.
   const showCustomStatus = useIsCustomStatus(issue.status);
 
+  // Fork (PRD A): a parent card's "含 N 个已取消" and "展开" ride the meta row
+  // with the progress ring, so the one-line progress has a single row under it.
+  const showNestedControls = !!nested && nested.summary.total > 0;
   const showAssigneeName = showAssigneeSection && hasAssignee && !showStartDate && !showDueDate;
-  const showUpdatedHint = showAssigneeName && !showChildProgress;
+  const showUpdatedHint = showAssigneeName && !showChildProgress && !showNestedControls;
   const { getActorName } = useActorName();
   const assigneeName =
     showAssigneeName && issue.assignee_type && issue.assignee_id
@@ -202,8 +205,10 @@ export const BoardCardContent = memo(function BoardCardContent({
     )
   ) : null;
 
-  const showMetaRow = showAssigneeSection || showStartDate || showDueDate || showChildProgress;
-  const showRightMeta = !!showStartDate || !!showDueDate || !!showChildProgress || showUpdatedHint;
+  const showMetaRow =
+    showAssigneeSection || showStartDate || showDueDate || showChildProgress || showNestedControls;
+  const showRightMeta =
+    !!showStartDate || !!showDueDate || !!showChildProgress || showUpdatedHint || showNestedControls;
 
   return (
     <div className={`${nested?.expanded ? "rounded-t-lg" : "rounded-lg"} border-[0.5px] border-surface-border bg-surface py-3 px-2.5 shadow-[var(--surface-shadow)] transition-colors group-hover/card:border-foreground/15 group-hover/card:bg-surface-hover group-data-[popup-open]/card:border-foreground/15 group-data-[popup-open]/card:bg-surface-hover group-data-[peeked]/card:ring-2 group-data-[peeked]/card:ring-brand/50`}>
@@ -265,12 +270,7 @@ export const BoardCardContent = memo(function BoardCardContent({
       )}
 
       {nested && (
-        <NestedCardSummary
-          summary={nested.summary}
-          segments={nested.segments}
-          expanded={nested.expanded}
-          onToggle={nested.onToggle}
-        />
+        <NestedCardSummary segments={nested.segments} />
       )}
       <IssueAgentRunCounts issueId={issue.id} />
 
@@ -278,12 +278,12 @@ export const BoardCardContent = memo(function BoardCardContent({
       {showMetaRow && (
         <div className="mt-2 flex items-center justify-between gap-2">
           {showAssigneeSection && (
-            <div className="min-w-0 flex-1">
+            <div className={`${showNestedControls ? "min-w-5 basis-0" : "min-w-0"} flex-1`}>
               {assigneeNode}
             </div>
           )}
           {showRightMeta && (
-            <div className="ml-auto flex shrink-0 items-center gap-2">
+            <div className={`ml-auto flex items-center gap-2 ${showNestedControls ? "min-w-0" : "shrink-0"}`}>
               {showStartDate && (
                 canEdit ? (
                   <PickerWrapper className="flex shrink-0">
@@ -340,8 +340,22 @@ export const BoardCardContent = memo(function BoardCardContent({
                   </span>
                 )
               )}
+              {showNestedControls && (
+                <NestedCardControls
+                  summary={nested!.summary}
+                  expanded={nested!.expanded}
+                  onToggle={nested!.onToggle}
+                />
+              )}
               {showChildProgress && (
-                <div className="inline-flex shrink-0 items-center gap-1">
+                <div
+                  className="inline-flex shrink-0 items-center gap-1"
+                  title={
+                    showNestedControls && nested!.summary.cancelled > 0
+                      ? t(($) => $.nested.cancelled, { n: nested!.summary.cancelled })
+                      : undefined
+                  }
+                >
                   <ProgressRing done={childProgress!.done} total={childProgress!.total} size={14} />
                   <span className="text-micro text-muted-foreground tabular-nums font-medium">
                     {childProgress!.done}/{childProgress!.total}

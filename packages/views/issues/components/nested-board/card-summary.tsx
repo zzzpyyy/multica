@@ -124,42 +124,50 @@ export function NestedToggle({ expanded, onToggle }: { expanded: boolean; onTogg
 }
 
 /**
- * Card rows for the nested board: the one-line progress on lines of its own,
- * then the cancelled count and the expand toggle. The "closed/total" figure
- * itself rides the card's existing progress ring. A parent without sub-issues
- * shows only what waits on the viewer (A21's P2), and nothing at all
- * otherwise (A3).
+ * The nested board's one-line progress on a card, on lines of its own. A
+ * parent without sub-issues shows only what waits on the viewer (A21's P2),
+ * and nothing at all otherwise (A3). The cancelled count and the expand
+ * toggle are not here: they share the card's meta row with the progress
+ * ring (NestedCardControls), so a parent card has one row under its line.
  */
-export function NestedCardSummary({
+export function NestedCardSummary({ segments }: { segments: readonly ProgressSegment[] }) {
+  if (segments.length === 0) return null;
+  return (
+    <div className="mt-1.5" data-testid="nested-card-summary">
+      <ProgressLine segments={segments} />
+    </div>
+  );
+}
+
+/**
+ * "含 N 个已取消" and "展开" for a parent card's meta row, before the progress
+ * ring. Nothing for a card without sub-issues.
+ */
+export function NestedCardControls({
   summary,
-  segments,
   expanded,
   onToggle,
 }: {
   summary: NestedSummary;
-  segments: readonly ProgressSegment[];
   expanded: boolean;
   onToggle: () => void;
 }) {
   const { t } = useT("issues");
-  if (summary.total === 0 && segments.length === 0) return null;
+  if (summary.total === 0) return null;
   return (
-    <div className="mt-1.5 space-y-0.5" data-testid="nested-card-summary">
-      <ProgressLine segments={segments} />
-      {(summary.cancelled > 0 || summary.total > 0) && (
-        <div className="flex items-center gap-1.5">
-          {summary.cancelled > 0 && (
-            <span className="text-micro text-muted-foreground">
-              {t(($) => $.nested.cancelled, { n: summary.cancelled })}
-            </span>
-          )}
-          {summary.total > 0 && (
-            <span className="ml-auto">
-              <NestedToggle expanded={expanded} onToggle={onToggle} />
-            </span>
-          )}
-        </div>
+    <>
+      {summary.cancelled > 0 && (
+        // The only part of the row that yields. Short of room (a 280 px column
+        // with an assignee, a due date, 展开 and the ring) it wraps whole onto
+        // the clipped second line instead of showing "含 …"; the ring's title
+        // still says it. Same trick as pull-request-list.tsx.
+        <span className="flex h-lh min-w-0 flex-wrap overflow-hidden text-micro text-muted-foreground" data-testid="nested-cancelled">
+          {/* A full-height first line to wrap away from; empty, it would be 0 tall and the "clipped" line would show. */}
+          <span aria-hidden="true" className="h-lh w-0" />
+          <span className="whitespace-nowrap">{t(($) => $.nested.cancelled, { n: summary.cancelled })}</span>
+        </span>
       )}
-    </div>
+      <NestedToggle expanded={expanded} onToggle={onToggle} />
+    </>
   );
 }
