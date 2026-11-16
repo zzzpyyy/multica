@@ -114,7 +114,8 @@ func TestSuperAgentForwardAndSetStatus(t *testing.T) {
 	worker := fx.Agent(t, "sa-worker", rt, testutil.Cols{"max_concurrent_tasks": 3})
 	k := fx.Issue(t, "sa forward target", testutil.Cols{"assignee_type": "agent", "assignee_id": worker, "status": "in_review"})
 	fx.Cleanup(t, `DELETE FROM agent_task_queue WHERE issue_id=$1`, k)
-	ask := fx.Comment(t, k, "接口用 v1 还是 v2？", testutil.Cols{"author_type": "agent", "author_id": worker})
+	atYou := "[@qa](mention://member/" + testUserID + ") "
+	ask := fx.Comment(t, k, atYou+"接口用 v1 还是 v2？", testutil.Cols{"author_type": "agent", "author_id": worker})
 	fx.Insert(t, "super_agent_question", testutil.Cols{"chat_session_id": sa.Session.ID, "comment_id": ask, "status": "asked"})
 	ident := identOf(t, fx, k)
 
@@ -140,7 +141,7 @@ func TestSuperAgentForwardAndSetStatus(t *testing.T) {
 	// R4: two questions waiting and no issue named → nothing forwarded.
 	k2 := fx.Issue(t, "sa second question")
 	for _, issue := range []string{k, k2} {
-		c := fx.Comment(t, issue, "要不要分页？", testutil.Cols{"author_type": "agent", "author_id": worker})
+		c := fx.Comment(t, issue, atYou+"要不要分页？", testutil.Cols{"author_type": "agent", "author_id": worker})
 		fx.Insert(t, "super_agent_question", testutil.Cols{"chat_session_id": sa.Session.ID, "comment_id": c, "status": "asked"})
 	}
 	before := fx.Count(t, `SELECT count(*) FROM comment WHERE author_id=$1`, sa.ID)
@@ -290,5 +291,63 @@ func TestOverdueQuestionPushedWhileRunStillRunning(t *testing.T) {
 	if status != "asked" || taskStatus != "cancelled" ||
 		fx.Count(t, `SELECT count(*) FROM chat_message WHERE chat_session_id=$1 AND task_id IS NULL AND content LIKE '%要不要支持分页%'`, sa.Session.ID) != 1 {
 		t.Fatalf("queued answer run: question %s, run %s", status, taskStatus)
+	}
+}
+
+// R1, R4 (BUNN-31 Nest batch): a question the member answered on the issue,
+// whose issue closed, or whose @ was edited away is no longer waiting, the
+// same as attention's awaiting_reply (A rule 7). With one question really
+// waiting, an answer that names no issue is forwarded there, and the turn
+// context lists only that one.
+func TestSuperAgentWaitingQuestionsMatchAttention(t *testing.T) {
+	fx, rt, sa := superAgentFixture(t)
+	worker := fx.Agent(t, "sa-open-worker", rt, testutil.Cols{"max_concurrent_tasks": 3})
+	atYou := "[@qa](mention://member/" + testUserID + ") "
+	ask := func(title, question string) (issue, comment string) {
+		issue = fx.Issue(t, title, testutil.Cols{"assignee_type": "agent", "assignee_id": worker})
+		fx.Cleanup(t, `DELETE FROM agent_task_queue WHERE issue_id=$1`, issue)
+		comment = fx.Comment(t, issue, question, testutil.Cols{"author_type": "agent", "author_id": worker,
+			"created_at": testutil.Raw(`now() - interval '1 minute'`)})
+		fx.Insert(t, "super_agent_question", testutil.Cols{"chat_session_id": sa.Session.ID, "comment_id": comment, "status": "asked"})
+		return issue, comment
+	}
+	k4, _ := ask("open K4", atYou+"接口用 v1 还是 v2？")
+	r1, _ := ask("replied R1", atYou+"用哪个方案？")
+	fx.Comment(t, r1, "用方案 A") // the member answered on the issue, not in the chat
+	g2, _ := ask("closed G2", atYou+"要不要加日志？")
+	fx.Exec(t, `UPDATE issue SET status='cancelled' WHERE id=$1`, g2)
+	_, edited := ask("edited E", atYou+"要不要分页？")
+	fx.Exec(t, `UPDATE comment SET content='要不要分页？' WHERE id=$1`, edited)
+	_, gone := ask("deleted D", atYou+"要不要写迁移？")
+	fx.Exec(t, `UPDATE comment SET deleted_at=now() WHERE id=$1`, gone)
+
+	turn := newSuperTurn(t, fx, sa, rt, "用 v2")
+	task, err := testHandler.Queries.GetAgentTask(context.Background(), parseUUID(turn.task))
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, err := testHandler.superAgentContext(context.Background(), &task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	section := block[strings.Index(block, "## 等用户回答的问题"):]
+	if !strings.Contains(section, identOf(t, fx, k4)) {
+		t.Fatalf("waiting questions miss K4:\n%s", section)
+	}
+	for name, issue := range map[string]string{"replied": r1, "cancelled": g2} {
+		if strings.Contains(section, identOf(t, fx, issue)+"：") {
+			t.Fatalf("waiting questions list the %s issue:\n%s", name, section)
+		}
+	}
+	for _, text := range []string{"要不要分页", "要不要写迁移"} {
+		if strings.Contains(section, text) {
+			t.Fatalf("waiting questions list %q:\n%s", text, section)
+		}
+	}
+
+	turn.action(t, "forward", "pending", map[string]any{"issue": "", "message_ids": turn.messages, "text": "用 v2"})
+	turn.run(t)
+	if n := fx.Count(t, `SELECT count(*) FROM comment WHERE issue_id=$1 AND author_id=$2 AND content LIKE '%用 v2%'`, k4, sa.ID); n != 1 {
+		t.Fatalf("forward comments on K4 = %d, want 1", n)
 	}
 }

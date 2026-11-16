@@ -75,7 +75,7 @@ func (h *Handler) superForward(ctx context.Context, task *db.AgentTaskQueue, ses
 		issue, found = service.ResolveIssueIdentifier(ctx, h.Queries, session.WorkspaceID, p.Issue)
 	}
 	if !found {
-		asked, err := h.Queries.ListSuperAgentQuestionsByStatus(ctx, db.ListSuperAgentQuestionsByStatusParams{ChatSessionID: session.ID, Status: "asked"})
+		asked, err := h.openSuperAgentQuestions(ctx, session)
 		issues := map[pgtype.UUID]bool{}
 		for _, q := range asked {
 			issues[q.IssueID] = true

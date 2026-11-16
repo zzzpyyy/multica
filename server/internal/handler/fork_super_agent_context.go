@@ -97,7 +97,7 @@ func (h *Handler) superAgentContext(ctx context.Context, task *db.AgentTaskQueue
 			fmt.Fprintf(&b, "- %s：%s\n", c.Kind, oneLine(string(c.Payload), 400))
 		}
 	}
-	if qs, err := h.Queries.ListSuperAgentQuestionsByStatus(ctx, db.ListSuperAgentQuestionsByStatusParams{ChatSessionID: session.ID, Status: "asked"}); err == nil && len(qs) > 0 {
+	if qs, err := h.openSuperAgentQuestions(ctx, session); err == nil && len(qs) > 0 {
 		b.WriteString("\n## 等用户回答的问题\n")
 		for _, q := range qs {
 			fmt.Fprintf(&b, "- %s：%s\n", service.IssueIdentifier(ws.IssuePrefix, q.IssueNumber), oneLine(q.Content, 300))
@@ -111,6 +111,29 @@ func (h *Handler) superAgentContext(ctx context.Context, task *db.AgentTaskQueue
 	}
 	b.WriteString(superAgentDataClose)
 	return b.String(), nil
+}
+
+// openSuperAgentQuestions are the questions still waiting for the member
+// (rule 14, R1, R4), on the same terms as attention's awaiting_reply (A rule
+// 7): answered on the issue, closed, deleted or no longer @-ing them means
+// not waiting. The turn context and the forward target both read this.
+func (h *Handler) openSuperAgentQuestions(ctx context.Context, session db.ChatSession) ([]db.ListOpenSuperAgentQuestionsRow, error) {
+	terminal, err := h.terminalIssueStatusKeys(ctx, session.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := h.Queries.ListOpenSuperAgentQuestions(ctx, db.ListOpenSuperAgentQuestionsParams{ChatSessionID: session.ID, TerminalStatusKeys: terminal})
+	if err != nil {
+		return nil, err
+	}
+	member := uuidToString(session.CreatorID)
+	open := rows[:0]
+	for _, q := range rows {
+		if mentionsMember(q.Content, member) {
+			open = append(open, q)
+		}
+	}
+	return open, nil
 }
 
 func oneLine(s string, max int) string {

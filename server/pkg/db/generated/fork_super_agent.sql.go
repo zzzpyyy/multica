@@ -469,6 +469,70 @@ func (q *Queries) ListMemberCommentsInIssues(ctx context.Context, arg ListMember
 	return items, nil
 }
 
+const listOpenSuperAgentQuestions = `-- name: ListOpenSuperAgentQuestions :many
+SELECT q.id, q.comment_id, q.status, q.created_at, c.issue_id, c.content, i.number AS issue_number
+FROM super_agent_question q
+JOIN chat_session s ON s.id = q.chat_session_id
+JOIN comment c ON c.id = q.comment_id
+JOIN issue i ON i.id = c.issue_id
+WHERE q.chat_session_id = $1 AND q.status = 'asked' AND c.deleted_at IS NULL
+  AND NOT (i.status = ANY($2::text[]))
+  AND NOT EXISTS (
+      SELECT 1 FROM comment r
+      WHERE r.issue_id = c.issue_id AND r.deleted_at IS NULL AND r.created_at > c.created_at
+        AND r.author_type = 'member' AND r.author_id = s.creator_id)
+ORDER BY q.created_at ASC
+`
+
+type ListOpenSuperAgentQuestionsParams struct {
+	ChatSessionID      pgtype.UUID `json:"chat_session_id"`
+	TerminalStatusKeys []string    `json:"terminal_status_keys"`
+}
+
+type ListOpenSuperAgentQuestionsRow struct {
+	ID          pgtype.UUID        `json:"id"`
+	CommentID   pgtype.UUID        `json:"comment_id"`
+	Status      string             `json:"status"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	IssueID     pgtype.UUID        `json:"issue_id"`
+	Content     string             `json:"content"`
+	IssueNumber int32              `json:"issue_number"`
+}
+
+// Questions still waiting for the member, as A rule 7 counts "待你回复":
+// asked, the @ comment not deleted, its issue not closed (done/cancelled
+// categories) or deleted, and no comment by the member on that issue after
+// it. The handler drops a comment whose @ was edited away. Super-agent
+// comments do not close one here: forwards and full answers already move
+// the status, and a partial answer leaves the rest asked (rule 19).
+func (q *Queries) ListOpenSuperAgentQuestions(ctx context.Context, arg ListOpenSuperAgentQuestionsParams) ([]ListOpenSuperAgentQuestionsRow, error) {
+	rows, err := q.db.Query(ctx, listOpenSuperAgentQuestions, arg.ChatSessionID, arg.TerminalStatusKeys)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListOpenSuperAgentQuestionsRow{}
+	for rows.Next() {
+		var i ListOpenSuperAgentQuestionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CommentID,
+			&i.Status,
+			&i.CreatedAt,
+			&i.IssueID,
+			&i.Content,
+			&i.IssueNumber,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPendingSuperAgentActions = `-- name: ListPendingSuperAgentActions :many
 
 SELECT id, chat_session_id, chat_message_id, kind, payload, status, result, created_at FROM super_agent_action
@@ -696,58 +760,6 @@ func (q *Queries) ListSuperAgentMessageIssueLinks(ctx context.Context, chatSessi
 	for rows.Next() {
 		var i ListSuperAgentMessageIssueLinksRow
 		if err := rows.Scan(&i.Kind, &i.Payload, &i.Result); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listSuperAgentQuestionsByStatus = `-- name: ListSuperAgentQuestionsByStatus :many
-SELECT q.id, q.comment_id, q.status, q.created_at, c.issue_id, c.content, i.number AS issue_number
-FROM super_agent_question q
-JOIN comment c ON c.id = q.comment_id
-JOIN issue i ON i.id = c.issue_id
-WHERE q.chat_session_id = $1 AND q.status = $2 AND c.deleted_at IS NULL
-ORDER BY q.created_at ASC
-`
-
-type ListSuperAgentQuestionsByStatusParams struct {
-	ChatSessionID pgtype.UUID `json:"chat_session_id"`
-	Status        string      `json:"status"`
-}
-
-type ListSuperAgentQuestionsByStatusRow struct {
-	ID          pgtype.UUID        `json:"id"`
-	CommentID   pgtype.UUID        `json:"comment_id"`
-	Status      string             `json:"status"`
-	CreatedAt   pgtype.Timestamptz `json:"created_at"`
-	IssueID     pgtype.UUID        `json:"issue_id"`
-	Content     string             `json:"content"`
-	IssueNumber int32              `json:"issue_number"`
-}
-
-func (q *Queries) ListSuperAgentQuestionsByStatus(ctx context.Context, arg ListSuperAgentQuestionsByStatusParams) ([]ListSuperAgentQuestionsByStatusRow, error) {
-	rows, err := q.db.Query(ctx, listSuperAgentQuestionsByStatus, arg.ChatSessionID, arg.Status)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListSuperAgentQuestionsByStatusRow{}
-	for rows.Next() {
-		var i ListSuperAgentQuestionsByStatusRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.CommentID,
-			&i.Status,
-			&i.CreatedAt,
-			&i.IssueID,
-			&i.Content,
-			&i.IssueNumber,
-		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
