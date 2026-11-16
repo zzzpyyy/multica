@@ -46,9 +46,8 @@ type issueAttentionResponse struct {
 //   - in_review: issues (top-level and sub-issues at any depth) whose status
 //     is in_review. Rules 4–6 (who accepts a sub-issue) are not live yet, so
 //     every one waits for you and in_review_by_others is empty (SB4a).
-//   - awaiting_reply: open issues whose latest comment @-mentioning you
-//     (not by you, not by the super-agent) has no later comment by you or
-//     by the super-agent.
+//   - awaiting_reply: open issues with at least one @ of you still waiting
+//     for your reply (loadMemberAwaitingReply).
 func (h *Handler) ListIssueAttention(w http.ResponseWriter, r *http.Request) {
 	userID, ok := requireUserID(w, r)
 	if !ok {
@@ -108,12 +107,14 @@ func (h *Handler) ListIssueAttention(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// memberAwaitingReply is A rule 7's "待你回复" for one member. It is the one
-// judgment of whether an @ still waits for the member: attention's
-// awaiting_reply and the super-agent's waiting questions (B rule 14; BUNN-29
-// "Nest 批 R1 修复") both read it. An @-mention comment waits while it
-// mentions the member directly, is not deleted, its issue is open, and no
-// comment by the member or the super-agent on that issue came after it.
+// memberAwaitingReply is A rule 7's "待你回复" for one member, judged per @
+// (一鸣 11-17, BUNN-29 "Nest 批 R1 修复"). It is the one judgment of whether
+// an @ still waits for the member: attention's awaiting_reply and the
+// super-agent's waiting questions (B rule 14) both read it. An @ waits while
+//   - it mentions the member directly, is not deleted, and its issue is open;
+//   - no comment by the member, and no super-agent forward of their answer,
+//     came after it on that issue (another member's comment does not count);
+//   - the super-agent has not fully answered it (a partial answer leaves it).
 type memberAwaitingReply struct {
 	issues   []pgtype.UUID   // issues with at least one waiting @
 	comments map[string]bool // waiting @ comment ids
@@ -166,9 +167,26 @@ func (h *Handler) loadMemberAwaitingReply(ctx context.Context, wsUUID pgtype.UUI
 	for _, reply := range replies {
 		replied[reply.IssueID] = reply.RepliedAt
 	}
+	ids := make([]pgtype.UUID, len(mentions))
+	for i, c := range mentions {
+		ids[i] = c.ID
+	}
+	answeredRows, err := h.Queries.ListAttentionAnsweredMentions(ctx, db.ListAttentionAnsweredMentionsParams{
+		CommentIds: ids, UserID: userUUID, WorkspaceID: wsUUID,
+	})
+	if err != nil {
+		return out, err
+	}
+	answered := make(map[pgtype.UUID]bool, len(answeredRows))
+	for _, id := range answeredRows {
+		answered[id] = true
+	}
 	listed := map[pgtype.UUID]bool{}
 	for _, c := range mentions {
 		if at, ok := replied[c.IssueID]; ok && at.Time.After(c.CreatedAt.Time) {
+			continue
+		}
+		if answered[c.ID] {
 			continue
 		}
 		out.comments[uuidToString(c.ID)] = true

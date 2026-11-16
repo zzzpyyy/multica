@@ -295,10 +295,10 @@ func TestOverdueQuestionPushedWhileRunStillRunning(t *testing.T) {
 	}
 }
 
-// R1, R4 (BUNN-31 Nest batch; BUNN-29 "Nest 批 R1 修复"): whether a
-// question still waits for the member is one judgment, attention's
-// awaiting_reply. Each case is checked on both sides: the super-agent's
-// waiting list and GET /api/issues/attention agree on every issue.
+// R1, R4 (BUNN-31 Nest batch; BUNN-29 "Nest 批 R1 修复", 一鸣 11-17):
+// whether an @ still waits for the member is one judgment, made per @. The
+// same data goes through both real code paths, the super-agent's waiting
+// questions and GET /api/issues/attention, and the two must agree.
 func TestSuperAgentWaitingQuestionsMatchAttention(t *testing.T) {
 	fx, rt, sa := superAgentFixture(t)
 	ctx := context.Background()
@@ -306,33 +306,69 @@ func TestSuperAgentWaitingQuestionsMatchAttention(t *testing.T) {
 	other := fx.User(t, "sa open other", "sa-open-other-"+sa.ID[:8]+"@multica.ai")
 	fx.Member(t, testWorkspaceID, other, "member")
 	atYou := "[@qa](mention://member/" + testUserID + ") "
-	ask := func(title, question string) (issue, comment string) {
-		issue = fx.Issue(t, title, testutil.Cols{"assignee_type": "agent", "assignee_id": worker})
-		fx.Cleanup(t, `DELETE FROM agent_task_queue WHERE issue_id=$1`, issue)
-		comment = fx.Comment(t, issue, question, testutil.Cols{"author_type": "agent", "author_id": worker,
-			"created_at": testutil.Raw(`now() - interval '2 minutes'`)})
-		fx.Insert(t, "super_agent_question", testutil.Cols{"chat_session_id": sa.Session.ID, "comment_id": comment, "status": "asked"})
-		return issue, comment
+	t1 := fx.Issue(t, "sa open T1")
+	said := fx.Comment(t, t1, "用 v2") // the member's words in the tree: what answers quote
+	ago := func(seconds int) testutil.Cols {
+		return testutil.Cols{"created_at": testutil.Raw(fmt.Sprintf("now() - interval '%d seconds'", seconds))}
 	}
-	later := testutil.Cols{"created_at": testutil.Raw(`now() - interval '1 minute'`)}
-	k4, _ := ask("open K4", atYou+"接口用 v1 还是 v2？")
-	replied, _ := ask("replied R1", atYou+"用哪个方案？")
-	fx.Comment(t, replied, "用方案 A", later) // the member answered on the issue, not in the chat
-	done, _ := ask("done", atYou+"要不要加缓存？")
+	newIssue := func(title string) string {
+		issue := fx.Issue(t, title, testutil.Cols{"parent_issue_id": t1, "assignee_type": "agent", "assignee_id": worker})
+		fx.Cleanup(t, `DELETE FROM agent_task_queue WHERE issue_id=$1`, issue)
+		return issue
+	}
+	askOn := func(issue, authorType, authorID, question, status string, secondsAgo int) string {
+		cols := ago(secondsAgo)
+		cols["author_type"], cols["author_id"] = authorType, authorID
+		comment := fx.Comment(t, issue, atYou+question, cols)
+		fx.Insert(t, "super_agent_question", testutil.Cols{"chat_session_id": sa.Session.ID, "comment_id": comment, "status": status})
+		return comment
+	}
+	ask := func(title, question string) (string, string) {
+		issue := newIssue(title)
+		return issue, askOn(issue, "agent", worker, question, "asked", 120)
+	}
+	// answer runs the real answer-run outcome for an agent's question.
+	answer := func(issue, question string, partial bool) {
+		t.Helper()
+		var q string
+		fx.QueryRow(t, `SELECT id FROM super_agent_question WHERE comment_id=$1`, question).Scan(&q)
+		fx.Exec(t, `UPDATE super_agent_question SET status='answering' WHERE id=$1`, q)
+		id := fx.Task(t, sa.ID, testutil.Cols{"runtime_id": rt, "issue_id": issue, "status": "completed", "trigger_comment_id": question,
+			"context": testutil.Raw(`jsonb_build_object('type','super_answer','question_id','` + q + `')`)})
+		task, err := testHandler.Queries.GetAgentTask(ctx, parseUUID(id))
+		if err != nil {
+			t.Fatal(err)
+		}
+		testHandler.runSuperAnswer(ctx, &task, fmt.Sprintf("```super-action\n{\"type\":\"answer\",\"sources\":[\"c:%s\"],\"partial\":%v}\n```", said, partial))
+	}
+
+	k4, _ := ask("open K4", "接口用 v1 还是 v2？")
+	replied, _ := ask("replied R1", "用哪个方案？")
+	fx.Comment(t, replied, "用方案 A", ago(60)) // the member answered on the issue, not in the chat
+	done, _ := ask("done", "要不要加缓存？")
 	fx.Exec(t, `UPDATE issue SET status='done' WHERE id=$1`, done)
-	cancelled, _ := ask("cancelled G2", atYou+"要不要加日志？")
+	cancelled, _ := ask("cancelled G2", "要不要加日志？")
 	fx.Exec(t, `UPDATE issue SET status='cancelled' WHERE id=$1`, cancelled)
-	edited, editedComment := ask("edited E", atYou+"要不要分页？")
+	edited, editedComment := ask("edited E", "要不要分页？")
 	fx.Exec(t, `UPDATE comment SET content='要不要分页？' WHERE id=$1`, editedComment)
-	deleted, deletedComment := ask("deleted D", atYou+"要不要写迁移？")
+	deleted, deletedComment := ask("deleted D", "要不要写迁移？")
 	fx.Exec(t, `UPDATE comment SET deleted_at=now() WHERE id=$1`, deletedComment)
-	// BUNN-55 (马云 21:39): the super-agent wrote on the issue after the @
-	// (it answered another question there). attention counts that as a
-	// reply, so the chat side must too; the rule itself is 一鸣's to change.
-	superWrote, _ := ask("super-agent wrote S", atYou+"要不要加监控？")
-	fx.Comment(t, superWrote, "> super-agent 引用 qa 的原话\n\n用 v2", testutil.Cols{"author_type": "agent", "author_id": sa.ID, "created_at": testutil.Raw(`now() - interval '1 minute'`)})
-	otherReplied, _ := ask("other member replied O", atYou+"超时设多少秒？")
+	otherReplied, _ := ask("other member replied O", "超时设多少秒？")
 	fx.Comment(t, otherReplied, "我觉得 10 秒", testutil.Cols{"author_id": other, "created_at": testutil.Raw(`now() - interval '1 minute'`)})
+	forwarded, _ := ask("forwarded F", "要不要加监控？")
+	turn := newSuperTurn(t, fx, sa, rt, identOf(t, fx, forwarded)+" 要加")
+	turn.action(t, "forward", "pending", map[string]any{"issue": identOf(t, fx, forwarded), "message_ids": turn.messages, "text": identOf(t, fx, forwarded) + " 要加"})
+	turn.run(t)
+	answeredFully, fullQuestion := ask("fully answered A", "接口用 v1 还是 v2？")
+	answer(answeredFully, fullQuestion, false)
+	answeredPartly, partQuestion := ask("partly answered P", "接口用 v1 还是 v2？超时多少？")
+	answer(answeredPartly, partQuestion, true)
+	// BUNN-55: another member asks first; later the assignee asks a second
+	// question there and the super-agent answers that one fully.
+	y := newIssue("BUNN-55 Y")
+	askOn(y, "member", other, "要不要加日志？", "asked", 120)
+	taQuestion := askOn(y, "agent", worker, "接口用 v1 还是 v2？", "asked", 90)
+	answer(y, taQuestion, false)
 
 	waitingInChat := func() map[string]bool {
 		t.Helper()
@@ -357,26 +393,32 @@ func TestSuperAgentWaitingQuestionsMatchAttention(t *testing.T) {
 		}
 		return out
 	}
-	want := map[string]bool{k4: true, otherReplied: true, replied: false, done: false, cancelled: false, edited: false, deleted: false, superWrote: false}
+	want := map[string]bool{
+		k4: true, otherReplied: true, answeredPartly: true, y: true,
+		replied: false, done: false, cancelled: false, edited: false, deleted: false, forwarded: false, answeredFully: false,
+	}
 	chat, attention := waitingInChat(), waitingInAttention()
 	for issue, w := range want {
 		if chat[issue] != w || attention[issue] != w {
-			t.Fatalf("%s: waiting in chat %v, in attention %v; want %v", identOf(t, fx, issue), chat[issue], attention[issue], w)
+			var title string
+			fx.QueryRow(t, `SELECT title FROM issue WHERE id=$1`, issue).Scan(&title)
+			t.Fatalf("%s: waiting in chat %v, in attention %v; want %v", title, chat[issue], attention[issue], w)
 		}
 	}
 
-	// Two really waiting (K4, and O whose reply came from someone else):
-	// an answer that names no issue is not forwarded.
+	// Several really waiting: an answer that names no issue is not forwarded.
 	before := fx.Count(t, `SELECT count(*) FROM comment WHERE author_id=$1`, sa.ID)
-	turn := newSuperTurn(t, fx, sa, rt, "可以")
+	turn = newSuperTurn(t, fx, sa, rt, "可以")
 	turn.action(t, "forward", "pending", map[string]any{"issue": "", "message_ids": turn.messages, "text": "可以"})
 	turn.run(t)
 	if after := fx.Count(t, `SELECT count(*) FROM comment WHERE author_id=$1`, sa.ID); after != before {
-		t.Fatalf("forward with two questions waiting posted %d comments", after-before)
+		t.Fatalf("forward with several questions waiting posted %d comments", after-before)
 	}
 
 	// The R1 scenario: R1 answered on the issue, G2 cancelled, only K4 left.
-	fx.Exec(t, `UPDATE issue SET status='cancelled' WHERE id=$1`, otherReplied)
+	for _, issue := range []string{otherReplied, answeredPartly, y} {
+		fx.Exec(t, `UPDATE issue SET status='cancelled' WHERE id=$1`, issue)
+	}
 	turn = newSuperTurn(t, fx, sa, rt, "用 v2")
 	task, err := testHandler.Queries.GetAgentTask(ctx, parseUUID(turn.task))
 	if err != nil {

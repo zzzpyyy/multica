@@ -58,9 +58,17 @@ func TestListIssueAttention(t *testing.T) {
 	comment(answered, "member", other, me+" ok?", 1)
 	comment(answered, "member", testUserID, "ok", 2)
 
+	// A super-agent forward of your chat answer is your reply (一鸣 11-17);
+	// any other super-agent comment on the issue is not (see
+	// TestSuperAgentWaitingQuestionsMatchAttention for answers).
+	superSession := dbfx.ChatSession(t, superAgent)
+	chatTurn := dbfx.Task(t, superAgent, testutil.Cols{"runtime_id": testRuntimeID, "chat_session_id": superSession, "status": "completed"})
 	answeredBySuper := issue("answered by super", "in_progress", top)
 	comment(answeredBySuper, "agent", worker, me+" v1 or v2?", 1)
-	comment(answeredBySuper, "agent", superAgent, "用 v2", 2)
+	comment(answeredBySuper, "agent", superAgent, "用 v2", 2, testutil.Cols{"source_task_id": chatTurn})
+	notAForward := issue("super comment, not a forward", "in_progress", top)
+	comment(notAForward, "agent", worker, me+" 要不要加缓存？", 1)
+	comment(notAForward, "agent", superAgent, "> super-agent 引用 Me 的原话", 2)
 
 	askedAgain := issue("asked again", "in_progress", top)
 	comment(askedAgain, "member", other, me+" first?", 1)
@@ -127,6 +135,7 @@ func TestListIssueAttention(t *testing.T) {
 	expectChain(awaiting, "awaiting_reply", askedUpper, top)
 	expectChain(awaiting, "awaiting_reply", askedAgain, top)
 	expectChain(awaiting, "awaiting_reply", deepAsk, child, top)
+	expectChain(awaiting, "awaiting_reply", notAForward, top)
 	for name, id := range map[string]string{
 		"answered": answered, "answered by super-agent": answeredBySuper, "cancelled": cancelled,
 		"code span": inCode, "@all": atAll, "self mention": selfMention, "deleted": deletedAsk, "foreign": foreign,

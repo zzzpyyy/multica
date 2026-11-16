@@ -28,16 +28,38 @@ WHERE i.workspace_id = @workspace_id
         SELECT a.id FROM agent a WHERE a.workspace_id = @workspace_id AND a.system_key = 'super'));
 
 -- name: ListAttentionReplyTimes :many
--- The latest comment on each issue that answers for the member: their own,
--- or the super-agent's (it only forwards or quotes the member, B rule 7).
+-- The latest comment on each issue that replies for the member and so
+-- answers every @ before it (一鸣 11-17): their own, or a super-agent forward
+-- of their chat answer (top-level, written by a turn of their own session).
+-- An answer on their behalf answers only the @ it sits under: see
+-- ListAttentionAnsweredMentions.
 SELECT c.issue_id, MAX(c.created_at)::timestamptz AS replied_at
 FROM comment c
 WHERE c.issue_id = ANY(@issue_ids::uuid[])
   AND c.deleted_at IS NULL
   AND ((c.author_type = 'member' AND c.author_id = @user_id)
-    OR (c.author_type = 'agent' AND c.author_id IN (
-          SELECT a.id FROM agent a WHERE a.workspace_id = @workspace_id AND a.system_key = 'super')))
+    OR (c.author_type = 'agent' AND c.parent_id IS NULL AND c.author_id IN (
+          SELECT a.id FROM agent a WHERE a.workspace_id = @workspace_id AND a.system_key = 'super')
+        AND EXISTS (
+          SELECT 1 FROM agent_task_queue t JOIN chat_session s ON s.id = t.chat_session_id
+          WHERE t.id = c.source_task_id AND s.creator_id = @user_id)))
 GROUP BY c.issue_id;
+
+-- name: ListAttentionAnsweredMentions :many
+-- @ comments the super-agent fully answered for the member: the member's
+-- question is answered (a partial answer leaves it asked, rule 19) and the
+-- answer sits under it. runSuperAnswer settles the question before it writes
+-- the reply, so the reply's comment:created event already sees it answered.
+SELECT q.comment_id
+FROM super_agent_question q
+JOIN chat_session s ON s.id = q.chat_session_id
+WHERE q.comment_id = ANY(@comment_ids::uuid[])
+  AND q.status = 'answered'
+  AND s.creator_id = @user_id AND s.workspace_id = @workspace_id
+  AND EXISTS (
+      SELECT 1 FROM comment r
+      WHERE r.parent_id = q.comment_id AND r.deleted_at IS NULL AND r.author_type = 'agent'
+        AND r.author_id = s.agent_id);
 
 -- name: ListIssueAncestors :many
 -- Parent chains, nearest first. Capped at 32 levels so a cycle in the data

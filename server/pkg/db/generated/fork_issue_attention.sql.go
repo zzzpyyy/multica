@@ -11,6 +11,49 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const listAttentionAnsweredMentions = `-- name: ListAttentionAnsweredMentions :many
+SELECT q.comment_id
+FROM super_agent_question q
+JOIN chat_session s ON s.id = q.chat_session_id
+WHERE q.comment_id = ANY($1::uuid[])
+  AND q.status = 'answered'
+  AND s.creator_id = $2 AND s.workspace_id = $3
+  AND EXISTS (
+      SELECT 1 FROM comment r
+      WHERE r.parent_id = q.comment_id AND r.deleted_at IS NULL AND r.author_type = 'agent'
+        AND r.author_id = s.agent_id)
+`
+
+type ListAttentionAnsweredMentionsParams struct {
+	CommentIds  []pgtype.UUID `json:"comment_ids"`
+	UserID      pgtype.UUID   `json:"user_id"`
+	WorkspaceID pgtype.UUID   `json:"workspace_id"`
+}
+
+// @ comments the super-agent fully answered for the member: the member's
+// question is answered (a partial answer leaves it asked, rule 19) and the
+// answer sits under it. runSuperAnswer settles the question before it writes
+// the reply, so the reply's comment:created event already sees it answered.
+func (q *Queries) ListAttentionAnsweredMentions(ctx context.Context, arg ListAttentionAnsweredMentionsParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listAttentionAnsweredMentions, arg.CommentIds, arg.UserID, arg.WorkspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var comment_id pgtype.UUID
+		if err := rows.Scan(&comment_id); err != nil {
+			return nil, err
+		}
+		items = append(items, comment_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAttentionMentionCandidates = `-- name: ListAttentionMentionCandidates :many
 SELECT c.id, c.issue_id, c.content, c.created_at
 FROM comment c
@@ -82,8 +125,11 @@ FROM comment c
 WHERE c.issue_id = ANY($1::uuid[])
   AND c.deleted_at IS NULL
   AND ((c.author_type = 'member' AND c.author_id = $2)
-    OR (c.author_type = 'agent' AND c.author_id IN (
-          SELECT a.id FROM agent a WHERE a.workspace_id = $3 AND a.system_key = 'super')))
+    OR (c.author_type = 'agent' AND c.parent_id IS NULL AND c.author_id IN (
+          SELECT a.id FROM agent a WHERE a.workspace_id = $3 AND a.system_key = 'super')
+        AND EXISTS (
+          SELECT 1 FROM agent_task_queue t JOIN chat_session s ON s.id = t.chat_session_id
+          WHERE t.id = c.source_task_id AND s.creator_id = $2)))
 GROUP BY c.issue_id
 `
 
@@ -98,8 +144,11 @@ type ListAttentionReplyTimesRow struct {
 	RepliedAt pgtype.Timestamptz `json:"replied_at"`
 }
 
-// The latest comment on each issue that answers for the member: their own,
-// or the super-agent's (it only forwards or quotes the member, B rule 7).
+// The latest comment on each issue that replies for the member and so
+// answers every @ before it (一鸣 11-17): their own, or a super-agent forward
+// of their chat answer (top-level, written by a turn of their own session).
+// An answer on their behalf answers only the @ it sits under: see
+// ListAttentionAnsweredMentions.
 func (q *Queries) ListAttentionReplyTimes(ctx context.Context, arg ListAttentionReplyTimesParams) ([]ListAttentionReplyTimesRow, error) {
 	rows, err := q.db.Query(ctx, listAttentionReplyTimes, arg.IssueIds, arg.UserID, arg.WorkspaceID)
 	if err != nil {
