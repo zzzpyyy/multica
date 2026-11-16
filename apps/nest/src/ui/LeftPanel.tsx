@@ -4,7 +4,7 @@ import type { Issue } from "../api";
 import { actorName, childrenOf, leftGroups, oneLine, runCounts, statusText } from "../model";
 import { go, issuePath } from "../router";
 import { useWorkspace } from "./context";
-import { Progress, ProgressLine } from "./Progress";
+import { Dotted, Progress, ProgressLine } from "./Progress";
 
 export function LeftPanel({ selectedTopId }: { selectedTopId: string | null }) {
   const ws = useWorkspace();
@@ -56,7 +56,7 @@ function Entry({ issue, selected }: { issue: Issue; selected: boolean }) {
         <span className="status">{statusText(issue, ws)}</span>
         {assignee && <span>{assignee}</span>}
         <Progress kids={kids} />
-        {runCounts(ws.runs, issue.id, ws.names).map((c) => <span key={c} className="runs">{c}</span>)}
+        {runCounts(ws.runs, issue.id, ws.names).map((c) => <span key={c} className="runs"><Dotted text={c} /></span>)}
       </span>
       <ProgressLine parts={parts} />
     </a>

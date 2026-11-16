@@ -57,10 +57,13 @@ a:hover { text-decoration: underline; }
 .entry-top .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .entry-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; font-size: 12px; color: var(--muted); }
 
-/* One-line progress: wraps only between parts, each part on one line. */
+/* One-line progress: wraps only between parts; a part fits on one line or,
+   wider than the line, wraps inside itself. " ·" ends the part before it. */
 .oneline { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
-.oneline .part { display: inline-block; white-space: nowrap; }
+.oneline .part { display: inline-block; max-width: 100%; overflow-wrap: anywhere; }
 .oneline .part.cta { color: var(--cta); font-weight: 600; }
+.sep { white-space: nowrap; }
+.oneline .sep { color: var(--muted); font-weight: normal; }
 .progress { display: inline-flex; align-items: center; gap: 4px; }
 .ring { display: inline-block; width: 12px; height: 12px; border-radius: 50%; }
 
@@ -83,7 +86,12 @@ a:hover { text-decoration: underline; }
 .comment header { display: flex; gap: 8px; align-items: center; font-size: 12px; }
 .comment header time { color: var(--muted); }
 .comment.highlight, .msg.highlight { background: var(--highlight); }
-.comment-body.clamp { max-height: calc(20 * 1.5em); overflow: hidden; }
+/* Folded: exactly 20 whole lines, counted across paragraphs and lists, no
+   half line. The first and last margins go so the box is the lines alone. */
+.comment-body { margin-top: 4px; }
+.comment-body.clamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 20; line-clamp: 20; overflow: hidden; }
+.comment-body > .md > :first-child { margin-top: 0; }
+.comment-body > .md > :last-child { margin-bottom: 0; }
 .md { line-height: 1.5; overflow-wrap: anywhere; }
 .md pre { background: var(--panel); padding: 8px; overflow-x: auto; }
 .md table { border-collapse: collapse; }

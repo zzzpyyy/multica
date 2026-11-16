@@ -20,7 +20,7 @@ import { go, issuePath } from "../router";
 import { Comments } from "./Comments";
 import { useWorkspace } from "./context";
 import { Markdown } from "./Markdown";
-import { Progress, ProgressLine } from "./Progress";
+import { Dotted, Progress, ProgressLine } from "./Progress";
 
 export function IssueView({ issue, commentId }: { issue: Issue; commentId: string | null }) {
   const ws = useWorkspace();
@@ -55,7 +55,7 @@ export function IssueView({ issue, commentId }: { issue: Issue; commentId: strin
           <span className="status" data-status={issue.status}>{statusText(issue, ws)}</span>
           {assignee && <span>{assignee}</span>}
           {waiting && <span className="waiting" data-testid="waiting">{waiting}</span>}
-          {runCounts(ws.runs, issue.id, ws.names).map((c) => <span key={c} className="runs">{c}</span>)}
+          {runCounts(ws.runs, issue.id, ws.names).map((c) => <span key={c} className="runs"><Dotted text={c} /></span>)}
           <Progress kids={kids} />
           {ws.att.mine.has(issue.id) && issue.status === "in_review" && <Approve issue={issue} />}
         </div>
@@ -98,7 +98,7 @@ function SubIssues({ parent }: { parent: Issue }) {
               aria-expanded={open.has(id)}
               onClick={() => setOpen((s) => { const n = new Set(s); if (!n.delete(id)) n.add(id); return n; })}
             >
-              {foldedLabel(row)}
+              <Dotted text={foldedLabel(row)} />
             </button>
             {open.has(id) &&
               row.groups.map((g) => (
@@ -132,7 +132,7 @@ function SubIssueRow({ issue, parent }: { issue: Issue; parent: Issue }) {
       <span className="status">{statusText(issue, ws)}</span>
       {assignee && <span>{assignee}</span>}
       {waiting && <span className="waiting">{waiting}</span>}
-      {runCounts(ws.runs, issue.id, ws.names).map((c) => <span key={c} className="runs">{c}</span>)}
+      {runCounts(ws.runs, issue.id, ws.names).map((c) => <span key={c} className="runs"><Dotted text={c} /></span>)}
       {kids.length > 0 && <Progress kids={kids} />}
     </div>
   );
