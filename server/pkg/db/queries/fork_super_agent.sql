@@ -5,24 +5,15 @@ SELECT * FROM super_agent_action
 WHERE chat_session_id = $1 AND status = 'pending'
 ORDER BY created_at ASC;
 
--- name: ListOpenSuperAgentQuestions :many
--- Questions still waiting for the member, as A rule 7 counts "待你回复":
--- asked, the @ comment not deleted, its issue not closed (done/cancelled
--- categories) or deleted, and no comment by the member on that issue after
--- it. The handler drops a comment whose @ was edited away. Super-agent
--- comments do not close one here: forwards and full answers already move
--- the status, and a partial answer leaves the rest asked (rule 19).
+-- name: ListAskedSuperAgentQuestions :many
+-- Asked questions with what the turn context shows. Whether one still waits
+-- for the member is decided by attention's awaiting_reply judgment
+-- (handler.loadMemberAwaitingReply), not here.
 SELECT q.id, q.comment_id, q.status, q.created_at, c.issue_id, c.content, i.number AS issue_number
 FROM super_agent_question q
-JOIN chat_session s ON s.id = q.chat_session_id
 JOIN comment c ON c.id = q.comment_id
 JOIN issue i ON i.id = c.issue_id
-WHERE q.chat_session_id = @chat_session_id AND q.status = 'asked' AND c.deleted_at IS NULL
-  AND NOT (i.status = ANY(@terminal_status_keys::text[]))
-  AND NOT EXISTS (
-      SELECT 1 FROM comment r
-      WHERE r.issue_id = c.issue_id AND r.deleted_at IS NULL AND r.created_at > c.created_at
-        AND r.author_type = 'member' AND r.author_id = s.creator_id)
+WHERE q.chat_session_id = @chat_session_id AND q.status = 'asked'
 ORDER BY q.created_at ASC;
 
 -- name: ListRecentSuperAgentPushes :many

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -57,8 +58,7 @@ func (h *Handler) ListIssueAttention(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	userUUID, err := util.ParseUUID(userID)
-	if err != nil {
+	if _, err := util.ParseUUID(userID); err != nil {
 		writeError(w, http.StatusUnauthorized, "user not authenticated")
 		return
 	}
@@ -70,59 +70,12 @@ func (h *Handler) ListIssueAttention(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	terminal, err := h.terminalIssueStatusKeys(ctx, wsUUID)
+	reply, err := h.loadMemberAwaitingReply(ctx, wsUUID, userID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to resolve status categories")
+		writeError(w, http.StatusInternalServerError, "failed to list issues awaiting your reply")
 		return
 	}
-	candidates, err := h.Queries.ListAttentionMentionCandidates(ctx, db.ListAttentionMentionCandidatesParams{
-		WorkspaceID:        wsUUID,
-		TerminalStatusKeys: terminal,
-		MentionPattern:     "%mention://member/" + strings.ToLower(userID) + ")%",
-		UserID:             userUUID,
-	})
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to list mentions")
-		return
-	}
-	// Latest confirmed mention per issue. Code spans, fenced blocks and
-	// non-canonical links do not mention anyone (util.ParseMentions).
-	lastMention := map[string]pgtype.Timestamptz{}
-	var mentioned []pgtype.UUID
-	for _, c := range candidates {
-		if !mentionsMember(c.Content, userID) {
-			continue
-		}
-		key := uuidToString(c.IssueID)
-		prev, seen := lastMention[key]
-		if !seen {
-			mentioned = append(mentioned, c.IssueID)
-		}
-		if !seen || c.CreatedAt.Time.After(prev.Time) {
-			lastMention[key] = c.CreatedAt
-		}
-	}
-	var awaiting []pgtype.UUID
-	if len(mentioned) > 0 {
-		replies, err := h.Queries.ListAttentionReplyTimes(ctx, db.ListAttentionReplyTimesParams{
-			IssueIds: mentioned, UserID: userUUID, WorkspaceID: wsUUID,
-		})
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "failed to list replies")
-			return
-		}
-		replied := make(map[string]pgtype.Timestamptz, len(replies))
-		for _, reply := range replies {
-			replied[uuidToString(reply.IssueID)] = reply.RepliedAt
-		}
-		for _, id := range mentioned {
-			key := uuidToString(id)
-			if at, ok := replied[key]; ok && at.Time.After(lastMention[key].Time) {
-				continue
-			}
-			awaiting = append(awaiting, id)
-		}
-	}
+	awaiting := reply.issues
 
 	ancestors := map[string][]string{}
 	if ids := append(append([]pgtype.UUID(nil), inReview...), awaiting...); len(ids) > 0 {
@@ -153,6 +106,78 @@ func (h *Handler) ListIssueAttention(w http.ResponseWriter, r *http.Request) {
 		InReview:         items(inReview),
 		InReviewByOthers: []issueReviewByOthersItem{},
 	})
+}
+
+// memberAwaitingReply is A rule 7's "待你回复" for one member. It is the one
+// judgment of whether an @ still waits for the member: attention's
+// awaiting_reply and the super-agent's waiting questions (B rule 14; BUNN-29
+// "Nest 批 R1 修复") both read it. An @-mention comment waits while it
+// mentions the member directly, is not deleted, its issue is open, and no
+// comment by the member or the super-agent on that issue came after it.
+type memberAwaitingReply struct {
+	issues   []pgtype.UUID   // issues with at least one waiting @
+	comments map[string]bool // waiting @ comment ids
+}
+
+func (h *Handler) loadMemberAwaitingReply(ctx context.Context, wsUUID pgtype.UUID, userID string) (memberAwaitingReply, error) {
+	out := memberAwaitingReply{comments: map[string]bool{}}
+	userUUID, err := util.ParseUUID(userID)
+	if err != nil {
+		return out, err
+	}
+	terminal, err := h.terminalIssueStatusKeys(ctx, wsUUID)
+	if err != nil {
+		return out, err
+	}
+	candidates, err := h.Queries.ListAttentionMentionCandidates(ctx, db.ListAttentionMentionCandidatesParams{
+		WorkspaceID:        wsUUID,
+		TerminalStatusKeys: terminal,
+		MentionPattern:     "%mention://member/" + strings.ToLower(userID) + ")%",
+		UserID:             userUUID,
+	})
+	if err != nil {
+		return out, err
+	}
+	// Code spans, fenced blocks and non-canonical links do not mention
+	// anyone (util.ParseMentions).
+	var mentions []db.ListAttentionMentionCandidatesRow
+	seen := map[pgtype.UUID]bool{}
+	var issueIDs []pgtype.UUID
+	for _, c := range candidates {
+		if !mentionsMember(c.Content, userID) {
+			continue
+		}
+		mentions = append(mentions, c)
+		if !seen[c.IssueID] {
+			seen[c.IssueID] = true
+			issueIDs = append(issueIDs, c.IssueID)
+		}
+	}
+	if len(mentions) == 0 {
+		return out, nil
+	}
+	replies, err := h.Queries.ListAttentionReplyTimes(ctx, db.ListAttentionReplyTimesParams{
+		IssueIds: issueIDs, UserID: userUUID, WorkspaceID: wsUUID,
+	})
+	if err != nil {
+		return out, err
+	}
+	replied := make(map[pgtype.UUID]pgtype.Timestamptz, len(replies))
+	for _, reply := range replies {
+		replied[reply.IssueID] = reply.RepliedAt
+	}
+	listed := map[pgtype.UUID]bool{}
+	for _, c := range mentions {
+		if at, ok := replied[c.IssueID]; ok && at.Time.After(c.CreatedAt.Time) {
+			continue
+		}
+		out.comments[uuidToString(c.ID)] = true
+		if !listed[c.IssueID] {
+			listed[c.IssueID] = true
+			out.issues = append(out.issues, c.IssueID)
+		}
+	}
+	return out, nil
 }
 
 // mentionsMember: content @-mentions this member directly (mention://member/<id>).

@@ -113,23 +113,22 @@ func (h *Handler) superAgentContext(ctx context.Context, task *db.AgentTaskQueue
 	return b.String(), nil
 }
 
-// openSuperAgentQuestions are the questions still waiting for the member
-// (rule 14, R1, R4), on the same terms as attention's awaiting_reply (A rule
-// 7): answered on the issue, closed, deleted or no longer @-ing them means
-// not waiting. The turn context and the forward target both read this.
-func (h *Handler) openSuperAgentQuestions(ctx context.Context, session db.ChatSession) ([]db.ListOpenSuperAgentQuestionsRow, error) {
-	terminal, err := h.terminalIssueStatusKeys(ctx, session.WorkspaceID)
+// openSuperAgentQuestions are the asked questions still waiting for the
+// member (rule 14, R1, R4). Waiting is attention's awaiting_reply judgment
+// (loadMemberAwaitingReply), not a second set of rules: the turn context
+// and the forward target both read this, so they always agree with Nest.
+func (h *Handler) openSuperAgentQuestions(ctx context.Context, session db.ChatSession) ([]db.ListAskedSuperAgentQuestionsRow, error) {
+	reply, err := h.loadMemberAwaitingReply(ctx, session.WorkspaceID, uuidToString(session.CreatorID))
 	if err != nil {
 		return nil, err
 	}
-	rows, err := h.Queries.ListOpenSuperAgentQuestions(ctx, db.ListOpenSuperAgentQuestionsParams{ChatSessionID: session.ID, TerminalStatusKeys: terminal})
+	rows, err := h.Queries.ListAskedSuperAgentQuestions(ctx, session.ID)
 	if err != nil {
 		return nil, err
 	}
-	member := uuidToString(session.CreatorID)
 	open := rows[:0]
 	for _, q := range rows {
-		if mentionsMember(q.Content, member) {
+		if reply.comments[uuidToString(q.CommentID)] {
 			open = append(open, q)
 		}
 	}
