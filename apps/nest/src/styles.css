@@ -28,7 +28,7 @@ a:hover { text-decoration: underline; }
 .link-button { background: none; border: 0; padding: 0; color: var(--accent); }
 .primary { background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 6px 12px; }
 .badge { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 0 6px; }
-.ident { color: var(--muted); font-variant-numeric: tabular-nums; }
+.ident { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; flex-shrink: 0; }
 
 .app { display: flex; flex-direction: column; height: 100vh; min-width: 1280px; }
 .topbar { display: flex; justify-content: space-between; align-items: center; height: 48px; padding: 0 16px; border-bottom: 1px solid var(--line); }
