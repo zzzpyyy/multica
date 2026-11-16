@@ -407,12 +407,30 @@ export interface IssueAttentionItem {
   ancestor_ids: string[];
 }
 
-/** `GET /api/issues/attention` (fork, PRD A rule 7). Workspace-wide. */
+/** Who reviews an in-review sub-issue (fork, PRD A rule 4). */
+export interface IssueReviewerRef {
+  type: "member" | "agent";
+  id: string;
+}
+
+export interface IssueReviewByOthersItem {
+  issue_id: string;
+  reviewer: IssueReviewerRef;
+}
+
+/** `GET /api/issues/attention` (fork, PRD A rule 7). Workspace-wide. Every
+ *  in-review issue is in exactly one of `in_review`, `in_review_by_others`. */
 export interface IssueAttentionResponse {
   /** Rule 7 "待你回复": issues waiting for the requester's reply. */
   awaiting_reply: IssueAttentionItem[];
-  /** Rule 7 "待你验收": issues that have a parent and whose own status is "in_review". */
+  /** Rule 7 "待你验收": in-review issues the requester reviews. Top-level
+   *  ones carry an empty `ancestor_ids`. Until rules 4–6 ship, every
+   *  in-review issue is here. */
   in_review: IssueAttentionItem[];
+  /** In-review sub-issues someone else reviews (rule 4). Empty until rules
+   *  4–6 ship. The server sends it from SB4a on; optional here so the
+   *  current UI, which does not read it, needs no change (plan v2.4-A2 4.4). */
+  in_review_by_others?: IssueReviewByOthersItem[];
 }
 
 export type IssueTableSortField =

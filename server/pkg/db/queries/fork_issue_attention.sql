@@ -1,11 +1,11 @@
 -- Fork (zzzpyyy/multica), A rule 7: what GET /api/issues/attention counts.
 
--- name: ListInReviewSubIssueIDs :many
--- "待你验收" before rules 4–6 ship: every sub-issue (any depth) in review.
+-- name: ListInReviewIssueIDs :many
+-- "待你验收" before rules 4–6 ship (plan v2.4-A2 SB4a): every issue in review,
+-- top-level ones included (their done is left to the member).
 SELECT id FROM issue
 WHERE workspace_id = @workspace_id
-  AND status = 'in_review'
-  AND parent_issue_id IS NOT NULL;
+  AND status = 'in_review';
 
 -- name: ListAttentionMentionCandidates :many
 -- Comments on open issues that may @ the member: a superset the handler

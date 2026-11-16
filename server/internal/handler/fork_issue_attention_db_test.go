@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -41,7 +42,7 @@ func TestListIssueAttention(t *testing.T) {
 	}
 	me := fmt.Sprintf("[@Me](mention://member/%s)", testUserID)
 
-	top := issue("top", "in_review", "") // in review but top-level: not listed
+	top := issue("top", "in_review", "") // top-level in review: listed, no ancestors (SB4a)
 	child := issue("child", "in_review", top)
 	grandchild := issue("grandchild", "in_review", child)
 	closedChild := issue("closed child", "done", top)
@@ -113,9 +114,10 @@ func TestListIssueAttention(t *testing.T) {
 			t.Fatalf("%s: %s ancestors = %v, want %v", name, id, got, chain)
 		}
 	}
+	expectChain(inReview, "in_review", top)
 	expectChain(inReview, "in_review", child, top)
 	expectChain(inReview, "in_review", grandchild, child, top)
-	for name, id := range map[string]string{"top-level": top, "closed": closedChild, "foreign": foreign} {
+	for name, id := range map[string]string{"closed": closedChild, "foreign": foreign} {
 		if _, ok := inReview[id]; ok {
 			t.Fatalf("in_review lists the %s issue %s", name, id)
 		}
@@ -132,6 +134,17 @@ func TestListIssueAttention(t *testing.T) {
 		if _, ok := awaiting[id]; ok {
 			t.Fatalf("awaiting_reply lists the %s issue %s", name, id)
 		}
+	}
+
+	// SB4a: in_review_by_others is present and empty until rules 4–6 ship.
+	var raw map[string]json.RawMessage
+	testutil.Call(t, testHandler.ListIssueAttention, newRequest(http.MethodGet, "/api/issues/attention", nil)).
+		Want(http.StatusOK).JSON(&raw)
+	if got := string(raw["in_review_by_others"]); got != "[]" {
+		t.Fatalf("in_review_by_others = %s, want []", got)
+	}
+	if got := string(raw["in_review"]); !strings.Contains(got, `"issue_id":"`+top+`","ancestor_ids":[]`) {
+		t.Fatalf("top-level in_review item = %s, want an empty ancestor_ids array", got)
 	}
 
 	// Closing it drops it from in_review.

@@ -20,15 +20,31 @@ type issueAttentionItem struct {
 	AncestorIDs []string `json:"ancestor_ids"`
 }
 
+// issueReviewByOthersItem is an in-review sub-issue someone else reviews
+// (rule 4). Plan v2.4-A2 4.1.
+type issueReviewByOthersItem struct {
+	IssueID  string           `json:"issue_id"`
+	Reviewer issueReviewerRef `json:"reviewer"`
+}
+
+type issueReviewerRef struct {
+	Type string `json:"type"` // member | agent
+	ID   string `json:"id"`
+}
+
 type issueAttentionResponse struct {
 	AwaitingReply []issueAttentionItem `json:"awaiting_reply"`
 	InReview      []issueAttentionItem `json:"in_review"`
+	// InReviewByOthers stays empty until rules 4–6 ship with the daemon
+	// (SB4b); until then every in-review issue waits for the requester.
+	InReviewByOthers []issueReviewByOthersItem `json:"in_review_by_others"`
 }
 
 // ListIssueAttention serves GET /api/issues/attention for the requesting
 // member, workspace-wide.
-//   - in_review: sub-issues (any depth) whose status is in_review. Rules 4–6
-//     (who accepts a sub-issue) are not live yet, so every one waits for you.
+//   - in_review: issues (top-level and sub-issues at any depth) whose status
+//     is in_review. Rules 4–6 (who accepts a sub-issue) are not live yet, so
+//     every one waits for you and in_review_by_others is empty (SB4a).
 //   - awaiting_reply: open issues whose latest comment @-mentioning you
 //     (not by you, not by the super-agent) has no later comment by you or
 //     by the super-agent.
@@ -48,7 +64,7 @@ func (h *Handler) ListIssueAttention(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 
-	inReview, err := h.Queries.ListInReviewSubIssueIDs(ctx, wsUUID)
+	inReview, err := h.Queries.ListInReviewIssueIDs(ctx, wsUUID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list issues in review")
 		return
@@ -133,8 +149,9 @@ func (h *Handler) ListIssueAttention(w http.ResponseWriter, r *http.Request) {
 		return out
 	}
 	writeJSON(w, http.StatusOK, issueAttentionResponse{
-		AwaitingReply: items(awaiting),
-		InReview:      items(inReview),
+		AwaitingReply:    items(awaiting),
+		InReview:         items(inReview),
+		InReviewByOthers: []issueReviewByOthersItem{},
 	})
 }
 

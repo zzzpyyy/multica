@@ -120,18 +120,18 @@ func (q *Queries) ListAttentionReplyTimes(ctx context.Context, arg ListAttention
 	return items, nil
 }
 
-const listInReviewSubIssueIDs = `-- name: ListInReviewSubIssueIDs :many
+const listInReviewIssueIDs = `-- name: ListInReviewIssueIDs :many
 
 SELECT id FROM issue
 WHERE workspace_id = $1
   AND status = 'in_review'
-  AND parent_issue_id IS NOT NULL
 `
 
 // Fork (zzzpyyy/multica), A rule 7: what GET /api/issues/attention counts.
-// "待你验收" before rules 4–6 ship: every sub-issue (any depth) in review.
-func (q *Queries) ListInReviewSubIssueIDs(ctx context.Context, workspaceID pgtype.UUID) ([]pgtype.UUID, error) {
-	rows, err := q.db.Query(ctx, listInReviewSubIssueIDs, workspaceID)
+// "待你验收" before rules 4–6 ship (plan v2.4-A2 SB4a): every issue in review,
+// top-level ones included (their done is left to the member).
+func (q *Queries) ListInReviewIssueIDs(ctx context.Context, workspaceID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listInReviewIssueIDs, workspaceID)
 	if err != nil {
 		return nil, err
 	}
