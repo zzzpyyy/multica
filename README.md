@@ -140,6 +140,7 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
   ```
 
   缺这个文件时桌面端只显示配置错误页，不会连官方云。
+- **Nest**：新写的 Web 前端，在 [`apps/nest`](apps/nest/README.md)，运行方式见它的 README。它不依赖、不引用 Multica 的界面代码。
 
 ### 发版
 
@@ -167,6 +168,7 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 | 文件 | 目的 | 验收 |
 |---|---|---|
 | `README.md` | 开头的说明和本节 | G6 |
+| `pnpm-lock.yaml` | 加上新前端 `apps/nest` 的依赖（Nest 本身是新增的目录，不登记） | N1 |
 | `.github/workflows/ci.yml` | 每次推送都跑 CI，加上 `fork-checks` 任务 | G7、G8 |
 | `.github/workflows/release.yml` | 只发 CLI 和 macOS 桌面端；删掉 Docker、Helm、Homebrew；tag 只认 `-fork.N`；发布前扫描安装包 | G7、M1、M5–M7 |
 | `.goreleaser.yml` | 删掉 `brews`；`prerelease: false`、`make_latest: true` | M5–M7 |

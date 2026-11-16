@@ -1,0 +1,123 @@
+/* Layout only. The visual style waits for Q14 (the user picks a sample);
+   then this file and ui/ change, nothing else. */
+:root {
+  --bg: #ffffff;
+  --panel: #f7f7f8;
+  --line: #e4e4e7;
+  --text: #18181b;
+  --muted: #71717a;
+  --accent: #2563eb;
+  --cta: #b45309;
+  --error: #b91c1c;
+  --highlight: #fef3c7;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--bg);
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+button { font: inherit; cursor: pointer; }
+button:disabled { cursor: default; opacity: 0.55; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.muted { color: var(--muted); }
+.error { color: var(--error); }
+.center { text-align: center; margin: 48px auto; }
+.empty { color: var(--muted); padding: 48px 24px; text-align: center; }
+.link-button { background: none; border: 0; padding: 0; color: var(--accent); }
+.primary { background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 6px 12px; }
+.badge { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 10px; padding: 0 6px; }
+.ident { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.app { display: flex; flex-direction: column; height: 100vh; min-width: 1280px; }
+.topbar { display: flex; justify-content: space-between; align-items: center; height: 48px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+.topbar-left, .topbar-right { display: flex; align-items: center; gap: 12px; }
+.topbar button { background: none; border: 1px solid transparent; border-radius: 6px; padding: 4px 8px; }
+.topbar button:hover { border-color: var(--line); }
+.segmented button[aria-pressed="true"] { border-color: var(--line); background: var(--panel); }
+.menu { position: relative; }
+.menu-list { position: absolute; z-index: 10; list-style: none; margin: 4px 0 0; padding: 4px; min-width: 180px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08); }
+.menu-list.right { right: 0; }
+.menu-list button { width: 100%; text-align: left; }
+
+.columns { flex: 1; min-height: 0; display: grid; grid-template-columns: 320px minmax(0, 1fr) 400px; }
+.columns.mode-tree { grid-template-columns: minmax(0, 1fr) 400px; }
+.left, .middle, .outline, .chat { min-height: 0; overflow-y: auto; }
+.left { border-right: 1px solid var(--line); background: var(--panel); padding: 8px; }
+.middle, .outline { padding: 16px 24px; }
+.chat { border-left: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden; }
+
+.group { margin-bottom: 12px; }
+.group-title { font-size: 12px; font-weight: 600; color: var(--muted); margin: 8px 4px; }
+.entry { display: block; padding: 8px; border-radius: 8px; color: var(--text); }
+.entry:hover { background: #ececef; text-decoration: none; }
+.entry.selected { background: #e0e7ff; }
+.entry-top { display: flex; gap: 6px; min-width: 0; }
+.entry-top .title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.entry-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 4px; font-size: 12px; color: var(--muted); }
+
+/* One-line progress: wraps only between parts, each part on one line. */
+.oneline { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.oneline .part { display: inline-block; white-space: nowrap; }
+.oneline .part.cta { color: var(--cta); font-weight: 600; }
+.progress { display: inline-flex; align-items: center; gap: 4px; }
+.ring { display: inline-block; width: 12px; height: 12px; border-radius: 50%; }
+
+.crumbs { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.issue-head h1 { font-size: 20px; margin: 0 0 8px; }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; color: var(--muted); }
+.waiting { color: var(--text); }
+.note { color: var(--muted); font-size: 12px; }
+.subissues { margin: 16px 0; border-top: 1px solid var(--line); }
+.stage h4 { font-size: 12px; color: var(--muted); margin: 12px 0 4px; }
+.sub-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.sub-row .title { font-weight: 500; }
+.folded-row { background: none; border: 0; padding: 8px 0; color: var(--muted); }
+.instances ol { margin: 4px 0; }
+.description { margin: 16px 0; padding: 12px; background: var(--panel); border-radius: 8px; }
+
+.comments h3 { font-size: 14px; }
+.thread { border-top: 1px solid var(--line); padding: 8px 0; }
+.reply { margin-left: 24px; }
+.comment header { display: flex; gap: 8px; align-items: center; font-size: 12px; }
+.comment header time { color: var(--muted); }
+.comment.highlight, .msg.highlight { background: var(--highlight); }
+.comment-body.clamp { max-height: calc(20 * 1.5em); overflow: hidden; }
+.md { line-height: 1.5; overflow-wrap: anywhere; }
+.md pre { background: var(--panel); padding: 8px; overflow-x: auto; }
+.md table { border-collapse: collapse; }
+.md td, .md th { border: 1px solid var(--line); padding: 2px 6px; }
+.md-img, .thumb { max-width: 240px; max-height: 180px; }
+.mention { color: var(--accent); }
+.attachments { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+
+.composer { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+.composer textarea { width: 100%; resize: vertical; font: inherit; padding: 8px; border: 1px solid var(--line); border-radius: 8px; }
+.composer-bar { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+
+.chat .messages { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; }
+.chat .composer { padding: 0 12px 12px; margin: 0; }
+.msg { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: var(--panel); }
+.msg.user { background: #e0e7ff; margin-left: 40px; }
+.msg .plain { white-space: pre-wrap; margin: 0; }
+.typing { font-size: 12px; }
+.new-messages { align-self: center; margin: -36px 0 8px; position: relative; z-index: 2; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); padding: 2px 10px; }
+.chat.onboarding { padding: 16px; gap: 12px; }
+.plan-card { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 8px; margin-top: 8px; }
+.plan-card header { display: flex; justify-content: space-between; }
+.plan-card dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; margin: 4px 0; }
+.plan-card dt { color: var(--muted); }
+.plan-card dd { margin: 0; }
+.card-actions { display: flex; gap: 8px; }
+
+.node-row { display: flex; align-items: center; gap: 4px; }
+.twisty { width: 20px; background: none; border: 0; color: var(--muted); }
+.node-open { display: flex; flex-wrap: wrap; gap: 4px 12px; background: none; border: 0; padding: 6px 4px; text-align: left; border-radius: 6px; }
+.node-open:hover { background: var(--panel); }
+.closed-row { padding: 4px 0; font-size: 12px; }
+
+.login { max-width: 360px; margin: 96px auto; }
+.login form { display: flex; flex-direction: column; gap: 12px; }
+.login label { display: flex; flex-direction: column; gap: 4px; }
+.login input { font: inherit; padding: 8px; border: 1px solid var(--line); border-radius: 6px; }

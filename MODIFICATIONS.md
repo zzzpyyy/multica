@@ -15,6 +15,7 @@ Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIO
 | 文件 | 改动目的 |
 |---|---|
 | `server/pkg/db/generated/` | sqlc 生成的代码，每次 `make sqlc` 都会覆盖 |
+| `pnpm-lock.yaml` | Nest：加上新前端 `apps/nest` 的依赖，由 `pnpm install` 生成 |
 | `packages/core/package.json` | B：导出 `./chat/super-agent`；F0：导出 `./fork`（仓库常量） |
 | `packages/views/locales/*/settings.json` | C：「发送」设置的说明只管发一条消息的输入框；F0：桌面端 CLI 来源检查结果和"检查更新"的文案，删掉自动更新开关的文案 |
 | `packages/views/locales/*/issues.json` | A：「聚合子任务」开关、一句话进度、展开列表的文案；D：实例列表、排队位置和原因的文案 |
