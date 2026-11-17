@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package daemon
 
 import (
@@ -2206,6 +2208,37 @@ func TestPromptCarriesJoinedWakeups(t *testing.T) {
 	}
 	if out := BuildPrompt(Task{IssueID: "issue-1"}, "claude"); strings.Contains(out, "joined this run") {
 		t.Errorf("prompt without joined wakeups mentions them:\n%s", out)
+	}
+}
+
+// Fork (A rule 4 exception): the reviewer-delivers sentence appears only when
+// the server says this run's agent owns the sub-issue and its parent; an old
+// server never sends the field.
+func TestPromptOwnerIsYouSentence(t *testing.T) {
+	t.Parallel()
+	const line = "You own both this sub-issue and its parent (directly, or as the leader of a squad that owns them), so you are this sub-issue's reviewer: when you deliver it, set it to done, not in_review."
+	var decoded Task
+	if err := json.Unmarshal([]byte(`{"issue_id":"issue-1","parent_issue":{"id":"p","title":"T","status":"in_progress","owner_is_you":true}}`), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	for name, task := range map[string]Task{
+		"fresh":   decoded,
+		"resumed": {IssueID: "issue-1", PriorSessionID: "s1", ParentIssue: decoded.ParentIssue},
+	} {
+		if out := BuildPrompt(task, "claude"); !strings.Contains(out, line) {
+			t.Errorf("%s prompt lacks the owner sentence:\n%s", name, out)
+		}
+	}
+	var old Task
+	if err := json.Unmarshal([]byte(`{"issue_id":"issue-1","parent_issue":{"id":"p","title":"T","status":"in_progress"}}`), &old); err != nil {
+		t.Fatal(err)
+	}
+	if out := BuildPrompt(old, "claude"); strings.Contains(out, "You own both this sub-issue") {
+		t.Errorf("prompt without owner_is_you has the sentence:\n%s", out)
+	}
+	review := BuildPrompt(Task{IssueID: "issue-1", WakeupID: "w1", HandoffNote: "x", WakeupSystemRule: "child_review"}, "claude")
+	if !strings.Contains(review, "sub-issue review rule") || strings.Contains(review, "members manage it") {
+		t.Errorf("review wakeup prompt:\n%s", review)
 	}
 }
 

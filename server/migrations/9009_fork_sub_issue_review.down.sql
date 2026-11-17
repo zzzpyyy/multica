@@ -1,0 +1,11 @@
+DELETE FROM issue_wakeup_receipt WHERE wakeup_id IN (SELECT id FROM issue_wakeup WHERE system_rule = 'child_review');
+DELETE FROM issue_wakeup WHERE system_rule = 'child_review';
+ALTER TABLE issue_wakeup DROP CONSTRAINT IF EXISTS issue_wakeup_system_rule_check;
+ALTER TABLE issue_wakeup ADD CONSTRAINT issue_wakeup_system_rule_check CHECK (system_rule IN ('child_done'));
+DROP TRIGGER IF EXISTS fork_sub_issue_review_update ON issue;
+DROP TRIGGER IF EXISTS fork_sub_issue_review_insert ON issue;
+DROP FUNCTION IF EXISTS fork_record_sub_issue_review();
+DROP FUNCTION IF EXISTS fork_task_chain_ended(uuid);
+DROP FUNCTION IF EXISTS fork_task_chain_root(uuid);
+DROP TABLE IF EXISTS fork_deferred_comment_trigger;
+DROP TABLE IF EXISTS fork_sub_issue_review;

@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package handler
 
 import (
@@ -119,8 +121,10 @@ const squadParentStatusOwned = `6. **Own the parent issue status.** This issue i
    routine progress updates. When you confirm the overall goal is met, run
    ` + "`" + `multica issue status <issue-id> in_review` + "`" + ` — this responsibility is
    itself the standing instruction that authorizes that change, so do it even
-   when no comment asked you to. Leave ` + "`" + `done` + "`" + ` to a human reviewer or
-   existing integrations (for example a PR with close intent that merges).`
+   when no comment asked you to. If this issue is top-level, leave
+   ` + "`" + `done` + "`" + ` to a human reviewer or existing integrations (for example a PR
+   with close intent that merges); if it is a sub-issue, its parent's owner
+   reviews it and sets done.`
 
 // leaderWorkflow says whether an owning leader's issue follows a project
 // workflow that came with the claim, and whether the daemon's runtime brief

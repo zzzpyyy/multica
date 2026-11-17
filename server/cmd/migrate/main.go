@@ -375,6 +375,8 @@ var concurrentIndexCleanups = map[string]string{
 	"9006_fork_super_agent_action_message_unique": "idx_super_agent_action_message",
 	"9007_fork_super_agent_push_dedupe_unique":    "idx_super_agent_push_dedupe",
 	"9008_fork_super_agent_question_unique":       "idx_super_agent_question_comment",
+	"9010_fork_sub_issue_review_pending":          "idx_fork_sub_issue_review_pending",
+	"9011_fork_deferred_comment_trigger_pending":  "idx_fork_deferred_comment_trigger_pending",
 }
 
 // concurrentDownIndexCleanups covers every migration whose down direction

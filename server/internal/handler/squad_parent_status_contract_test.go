@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package handler
 
 import (
@@ -82,6 +84,15 @@ func TestSquadAssignedLeaderCanWrapUpOnCommentTurn(t *testing.T) {
 	combined := briefing + "\n" + brief
 	if !strings.Contains(combined, "multica issue status <issue-id> in_review") {
 		t.Error("combined instructions never tell the owning leader how to wrap up")
+	}
+	// Fork (A rules 4–6): done is human only at the top; a sub-issue's parent
+	// owner sets it. Both halves say so.
+	if !strings.Contains(briefing, "If this issue is top-level, leave") || !strings.Contains(briefing, "if it is a sub-issue, its parent's owner") ||
+		!strings.Contains(briefing, "reviews it and sets done.") {
+		t.Errorf("squad protocol rule 6 lacks the top-level/sub-issue split:\n%s", briefing)
+	}
+	if strings.Contains(brief, "`done` stays human.\n") || !strings.Contains(brief, "a top-level issue's `done` stays human") {
+		t.Errorf("runtime brief keeps the old done rule:\n%s", brief)
 	}
 }
 

@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package service
 
 import (
@@ -38,7 +40,9 @@ import (
 const (
 	wakeupOutcomeMerged       = "merged"
 	wakeupOutcomeAcknowledged = "acknowledged"
-	maxJoinedWakeupNote       = 12000
+	// Fork (A rules 4–6): a review input that went stale before it ran.
+	wakeupOutcomeNoAction = "no_action"
+	maxJoinedWakeupNote   = 12000
 )
 
 // receiptActor reads who produced an event receipt. Coalesced receipts keep
@@ -303,6 +307,37 @@ func (s *IssueWakeupService) reserveForRun(ctx context.Context, q *db.Queries, i
 		}
 		receipts = append(receipts, r)
 	}
+	// Fork (A rules 4–6): a stale review input does not ride along; the
+	// rule's next dispatch drops it.
+	if specForRule(w).liveInputs && len(receipts) > 0 {
+		live, _, err := splitLiveReviewInputs(ctx, q, issue.ID, task.AgentID, receipts)
+		if err != nil {
+			return nil, nil, err
+		}
+		keep := map[pgtype.UUID]bool{}
+		for _, r := range live {
+			keep[r.ID] = true
+		}
+		var stillHeld, staleHeld, stillFree []pgtype.UUID
+		for _, id := range held {
+			if keep[id] {
+				stillHeld = append(stillHeld, id)
+			} else {
+				staleHeld = append(staleHeld, id)
+			}
+		}
+		for _, id := range free {
+			if keep[id] {
+				stillFree = append(stillFree, id)
+			}
+		}
+		if len(staleHeld) > 0 {
+			if err := q.ReleaseWakeupReceipts(ctx, staleHeld); err != nil {
+				return nil, nil, err
+			}
+		}
+		receipts, held, free = live, stillHeld, stillFree
+	}
 	release := func() (*joinedWakeup, []string, error) {
 		if len(held) == 0 {
 			return nil, nil, nil
@@ -385,7 +420,7 @@ func (s *IssueWakeupService) mayJoin(ctx context.Context, q *db.Queries, issue d
 	if ws, err := q.GetWorkspace(ctx, issue.WorkspaceID); err == nil {
 		settings = ws.Settings
 	}
-	return ChildDoneInstruction(w.Instruction, settings), true, nil
+	return specForRule(w).instructionFor(w, settings), true, nil
 }
 
 // takenRun is a run that took some of a rule's inputs along and has started.

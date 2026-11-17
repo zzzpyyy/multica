@@ -33,6 +33,8 @@ var workspaceDeletionManifest = map[string]workspaceDeleteAction{
 	"super_agent_action":                 workspaceDelete, // Fork (B): DeleteWorkspaceChatMessages.
 	"super_agent_push":                   workspaceDelete,
 	"super_agent_question":               workspaceDelete,
+	"fork_sub_issue_review":              workspaceDelete, // Fork (A rules 4-6): DeleteWorkspaceIssueRoots.
+	"fork_deferred_comment_trigger":      workspaceDelete,
 	"agent_to_label":                     workspaceDelete,
 	"attachment":                         workspaceDelete,
 	"autopilot":                          workspaceDelete,

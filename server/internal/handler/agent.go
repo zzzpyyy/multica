@@ -387,6 +387,10 @@ type ClaimParentIssue struct {
 	Identifier string `json:"identifier,omitempty"`
 	Title      string `json:"title"`
 	Status     string `json:"status"`
+	// OwnerIsYou (fork, A rule 4): this run's agent owns both the sub-issue and
+	// its parent (a squad counts as its leader), so it reviews its own
+	// delivery and sets done directly. Omitted when false.
+	OwnerIsYou bool `json:"owner_is_you,omitempty"`
 }
 
 // TaskCancellationActor is the point-in-time actor snapshot attached to a

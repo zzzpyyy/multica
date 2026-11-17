@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS idx_fork_deferred_comment_trigger_pending;

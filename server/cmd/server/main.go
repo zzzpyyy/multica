@@ -734,6 +734,7 @@ func main() {
 	registerAutopilotListeners(bus, autopilotSvc)
 	registerForkInstanceListeners(bus, taskSvc)   // Fork (D)
 	registerForkSuperAgentListeners(bus, taskSvc) // Fork (B)
+	registerForkReviewListeners(bus, h)           // Fork (A rules 4–6)
 
 	// Construct a LivenessStore that mirrors the one wired into the HTTP
 	// handler. Both the heartbeat write path (handler) and the sweeper read
@@ -857,6 +858,9 @@ func main() {
 	}
 	if err := schedulerMgr.Register(scheduler.InstanceBatchSettleSweepJob(taskSvc)); err != nil { // Fork (D)
 		slog.Error("scheduler: register instance batch settle sweep", "error", err)
+	}
+	if err := schedulerMgr.Register(scheduler.SubIssueReviewSweepJob(h)); err != nil { // Fork (A rules 4–6)
+		slog.Error("scheduler: register sub-issue review sweep", "error", err)
 	}
 	if err := schedulerMgr.Register(scheduler.SuperAgentQuestionSweepJob(taskSvc)); err != nil { // Fork (B)
 		slog.Error("scheduler: register super-agent question sweep", "error", err)

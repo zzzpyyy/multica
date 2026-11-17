@@ -2822,11 +2822,19 @@ func (h *Handler) loadClaimParentIssue(ctx context.Context, task *db.AgentTaskQu
 		}
 		return nil, 0
 	}
-	return &ClaimParentIssue{
+	out := &ClaimParentIssue{
 		ID:     uuidToString(parent.ID),
 		Title:  parent.Title,
 		Status: parent.Status,
-	}, parent.Number
+	}
+	// Fork (A rule 4): only when this run's agent is the reviewer because it
+	// delivers the sub-issue itself (plan v2.4-A2-r4 §3).
+	if reviewer, err := service.SubIssueReviewer(ctx, h.Queries, issue); err != nil {
+		slog.Warn("task claim: failed to resolve sub-issue reviewer", "task_id", uuidToString(task.ID), "issue_id", uuidToString(issue.ID), "error", err)
+	} else {
+		out.OwnerIsYou = reviewer.Kind == service.ReviewerSelf && reviewer.ID == task.AgentID
+	}
+	return out, parent.Number
 }
 
 func claimResponseAgentIdentityMatches(resp AgentTaskResponse) bool {

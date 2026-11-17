@@ -1,0 +1,1 @@
+DROP INDEX CONCURRENTLY IF EXISTS idx_fork_sub_issue_review_pending;

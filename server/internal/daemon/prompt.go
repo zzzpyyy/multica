@@ -102,12 +102,16 @@ func buildParentIssueBlock(task Task) string {
 	b.WriteString("[Parent issue]\n")
 	fmt.Fprintf(&b, "This issue is a sub-issue of %s \"%s\" (status: %s).", name, p.Title, p.Status)
 	if task.PriorSessionID != "" && !task.PriorSessionResumeUnavailable {
-		fmt.Fprintf(&b, " If you have not read the parent in this session, read it before starting work: %s, then %s.\n\n", getCmd, scanCmd)
+		fmt.Fprintf(&b, " If you have not read the parent in this session, read it before starting work: %s, then %s.\n", getCmd, scanCmd)
+		b.WriteString(ownerIsYouLine(p))
+		b.WriteString("\n")
 		return b.String()
 	}
 	b.WriteString(" The discussion that produced this sub-issue — decisions, trade-offs, mockups — lives on the parent; this issue's description is only the part handed to you.\n")
 	fmt.Fprintf(&b, "Before starting work, read the parent: %s, then scan its threads with %s and expand the ones that shaped this sub-issue. `multica issue children %s --output json` shows what your sibling sub-issues cover.\n", getCmd, scanCmd, p.ID)
-	b.WriteString("This issue's description defines your scope; the parent is context. If they conflict, ask on this issue instead of picking one.\n\n")
+	b.WriteString("This issue's description defines your scope; the parent is context. If they conflict, ask on this issue instead of picking one.\n")
+	b.WriteString(ownerIsYouLine(p))
+	b.WriteString("\n")
 	return b.String()
 }
 
@@ -351,13 +355,25 @@ func BuildPrompt(task Task, provider string, options ...PromptOption) string {
 	return body
 }
 
+// ownerIsYouLine is the [Parent issue] sentence for an agent that reviews its
+// own sub-issue (fork, A rule 4 exception).
+func ownerIsYouLine(p *ParentIssueData) string {
+	if p == nil || !p.OwnerIsYou {
+		return ""
+	}
+	return "You own both this sub-issue and its parent (directly, or as the leader of a squad that owns them), so you are this sub-issue's reviewer: when you deliver it, set it to done, not in_review.\n"
+}
+
 func buildPromptBody(task Task, provider string) string {
 	if task.WakeupID != "" {
 		var b strings.Builder
 		fmt.Fprintf(&b, "You are running as a local coding agent for a Multica workspace.\n\nYour assigned issue ID is: %s\n\n[WAKEUP]\n%s\n\n", task.IssueID, task.HandoffNote)
 		fmt.Fprintf(&b, "Start by running `multica issue get %s --output json`, then read current run/comment state. Decide whether the instruction's goal is met; the trigger reports a fact, not business completion. This is an ordinary run with normal result delivery, except where the [WAKEUP] block offers a check-in.\n", task.IssueID)
 		fmt.Fprintf(&b, "Scan comment threads with `multica issue comment list %s --roots-only --summary --compact --output json`, then expand relevant threads with `--thread <id> --tail 30`.\n", task.IssueID)
-		if task.WakeupSystemRule != "" {
+		if task.WakeupSystemRule == "child_review" {
+			// Fork (A rules 4–6): the review rule has no switch.
+			fmt.Fprintf(&b, "This wakeup is the platform's sub-issue review rule for this issue. It cannot be changed or disabled; review each delivery as the [WAKEUP] block says.\n")
+		} else if task.WakeupSystemRule != "" {
 			// Platform rules belong to the issue, not to a run; members manage them.
 			fmt.Fprintf(&b, "This wakeup is the platform's sub-issue rule for this issue. Do not try to change or disable it; members manage it on the issue.\n")
 		} else {

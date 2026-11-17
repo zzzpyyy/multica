@@ -509,6 +509,13 @@ cleared_unread AS (
 -- Fork (D): instance batches have no FK to issue (migration 9001).
 cleared_task_batches AS (
     DELETE FROM agent_task_batch WHERE issue_id IN (SELECT target.id FROM target)
+),
+-- Fork (A rules 4-6): review rows have no FK to issue (migration 9009).
+cleared_sub_issue_reviews AS (
+    DELETE FROM fork_sub_issue_review WHERE issue_id IN (SELECT target.id FROM target)
+),
+cleared_deferred_comment_triggers AS (
+    DELETE FROM fork_deferred_comment_trigger WHERE child_issue_id IN (SELECT target.id FROM target)
 )
 DELETE FROM issue WHERE issue.id IN (SELECT target.id FROM target);
 

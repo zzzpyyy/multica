@@ -51,6 +51,7 @@ LEFT JOIN "user" actor_user ON actor_user.id=actor_member.user_id
  WHERE w.workspace_id= $4 AND w.system_rule IS NULL
  UNION ALL
  -- The child-done system rule of each open parent that still waits for a
+ -- (fork: child_review has no switch and is not listed)
  -- sub-issue: every child when unstaged, else its lowest unfinished stage.
  -- Its target is the parent's assignee (a squad's leader) at the moment.
  SELECT w.id,w.issue_id,p.title,ws.issue_prefix||'-'||p.number,
@@ -86,7 +87,7 @@ LEFT JOIN "user" actor_user ON actor_user.id=actor_member.user_id
   WHERE t.context->>'wakeup_id'=w.id::text AND t.issue_id=w.issue_id
    AND t.status IN ('queued','deferred','dispatched','running','waiting_local_directory')
  ) sr ON true
- WHERE w.workspace_id= $4 AND w.system_rule IS NOT NULL AND agg.open_count>0
+ WHERE w.workspace_id= $4 AND w.system_rule='child_done' AND agg.open_count>0
   AND p.status NOT IN ('done','cancelled')
   AND NOT EXISTS(SELECT 1 FROM issue_status s WHERE s.workspace_id=p.workspace_id AND s.key=p.status AND s.category IN ('done','closed'))
 ), classified AS (
@@ -150,6 +151,7 @@ type ListWorkspaceWakeupsParams struct {
 	PageLimit   int32         `json:"page_limit"`
 }
 
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
 // Counts, filter choices, and page share one snapshot and the same access scope.
 func (q *Queries) ListWorkspaceWakeups(ctx context.Context, arg ListWorkspaceWakeupsParams) ([]byte, error) {
 	row := q.db.QueryRow(ctx, listWorkspaceWakeups,

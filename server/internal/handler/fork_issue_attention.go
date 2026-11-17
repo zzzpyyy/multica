@@ -7,6 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/multica-ai/multica/server/internal/service"
 	"github.com/multica-ai/multica/server/internal/util"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
@@ -36,16 +37,18 @@ type issueReviewerRef struct {
 type issueAttentionResponse struct {
 	AwaitingReply []issueAttentionItem `json:"awaiting_reply"`
 	InReview      []issueAttentionItem `json:"in_review"`
-	// InReviewByOthers stays empty until rules 4–6 ship with the daemon
-	// (SB4b); until then every in-review issue waits for the requester.
+	// InReviewByOthers: in-review sub-issues another member or a wakeable
+	// agent reviews (rule 4, SB4b).
 	InReviewByOthers []issueReviewByOthersItem `json:"in_review_by_others"`
 }
 
 // ListIssueAttention serves GET /api/issues/attention for the requesting
 // member, workspace-wide.
-//   - in_review: issues (top-level and sub-issues at any depth) whose status
-//     is in_review. Rules 4–6 (who accepts a sub-issue) are not live yet, so
-//     every one waits for you and in_review_by_others is empty (SB4a).
+//   - in_review / in_review_by_others: every issue whose status is in_review
+//     is in exactly one of them. Rule 4 (service.ResolveSubIssueReviewer, the
+//     one implementation) decides: top-level issues and sub-issues nobody else
+//     can review wait for you; those another member or a wakeable agent that
+//     did not deliver them reviews list that reviewer (SB4b).
 //   - awaiting_reply: open issues with at least one @ of you still waiting
 //     for your reply (loadMemberAwaitingReply).
 func (h *Handler) ListIssueAttention(w http.ResponseWriter, r *http.Request) {
@@ -63,10 +66,26 @@ func (h *Handler) ListIssueAttention(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 
-	inReview, err := h.Queries.ListInReviewIssueIDs(ctx, wsUUID)
+	reviewRows, err := h.Queries.ListInReviewReviewerInputs(ctx, wsUUID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list issues in review")
 		return
+	}
+	userUUID := parseUUID(userID)
+	var inReview []pgtype.UUID
+	byOthers := []issueReviewByOthersItem{}
+	for _, row := range reviewRows {
+		reviewer := service.ResolveSubIssueReviewer(service.ReviewerInputFromRow(row.ParentIssueID, row.ParentAssigneeType,
+			row.ParentAssigneeID, row.ParentSquadLeaderID, row.ReviewerAgentWakeable, row.ParentMemberPresent,
+			row.ChildAssigneeType, row.ChildAssigneeID, row.ChildSquadLeaderID))
+		switch {
+		case reviewer.Kind == service.ReviewerAgent:
+			byOthers = append(byOthers, issueReviewByOthersItem{IssueID: uuidToString(row.ID), Reviewer: issueReviewerRef{Type: "agent", ID: uuidToString(reviewer.ID)}})
+		case reviewer.Kind == service.ReviewerMember && reviewer.ID != userUUID:
+			byOthers = append(byOthers, issueReviewByOthersItem{IssueID: uuidToString(row.ID), Reviewer: issueReviewerRef{Type: "member", ID: uuidToString(reviewer.ID)}})
+		default: // yours, self, or the parent's member is you
+			inReview = append(inReview, row.ID)
+		}
 	}
 
 	reply, err := h.loadMemberAwaitingReply(ctx, wsUUID, userID)
@@ -103,7 +122,7 @@ func (h *Handler) ListIssueAttention(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, issueAttentionResponse{
 		AwaitingReply:    items(awaiting),
 		InReview:         items(inReview),
-		InReviewByOthers: []issueReviewByOthersItem{},
+		InReviewByOthers: byOthers,
 	})
 }
 

@@ -55,6 +55,7 @@ func (q *Queries) ListAttentionAnsweredMentions(ctx context.Context, arg ListAtt
 }
 
 const listAttentionMentionCandidates = `-- name: ListAttentionMentionCandidates :many
+
 SELECT c.id, c.issue_id, c.content, c.created_at
 FROM comment c
 JOIN issue i ON i.id = c.issue_id
@@ -83,6 +84,7 @@ type ListAttentionMentionCandidatesRow struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+// Fork (zzzpyyy/multica), A rule 7: what GET /api/issues/attention counts.
 // Comments on open issues that may @ the member: a superset the handler
 // confirms with util.ParseMentions. ILIKE because mention UUIDs are
 // case-insensitive. The member's own and the super-agent's comments never
@@ -162,36 +164,6 @@ func (q *Queries) ListAttentionReplyTimes(ctx context.Context, arg ListAttention
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listInReviewIssueIDs = `-- name: ListInReviewIssueIDs :many
-
-SELECT id FROM issue
-WHERE workspace_id = $1
-  AND status = 'in_review'
-`
-
-// Fork (zzzpyyy/multica), A rule 7: what GET /api/issues/attention counts.
-// "待你验收" before rules 4–6 ship (plan v2.4-A2 SB4a): every issue in review,
-// top-level ones included (their done is left to the member).
-func (q *Queries) ListInReviewIssueIDs(ctx context.Context, workspaceID pgtype.UUID) ([]pgtype.UUID, error) {
-	rows, err := q.db.Query(ctx, listInReviewIssueIDs, workspaceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []pgtype.UUID{}
-	for rows.Next() {
-		var id pgtype.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

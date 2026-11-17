@@ -578,6 +578,13 @@ deleted_unread AS (
 deleted_task_batches AS (
  DELETE FROM agent_task_batch WHERE workspace_id=$1
 ),
+-- Fork (A rules 4-6): review rows (migration 9009).
+deleted_sub_issue_reviews AS (
+ DELETE FROM fork_sub_issue_review WHERE workspace_id=$1
+),
+deleted_deferred_comment_triggers AS (
+ DELETE FROM fork_deferred_comment_trigger WHERE workspace_id=$1
+),
 deleted_issues AS (
     DELETE FROM issue WHERE issue.workspace_id = $1
 ),

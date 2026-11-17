@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package service
 
 import (
@@ -911,6 +913,13 @@ func (s *IssueWakeupService) pendingInputs(ctx context.Context, workspaceIDs []p
 		}
 		for _, g := range groups {
 			held := g.Reserved || g.OwnClaimed || g.UserWaiting
+			// Fork (A rules 4–6): review inputs kept while the parent is in
+			// backlog wait on purpose.
+			if !held && g.SystemRule {
+				if held, err = s.reviewInputsParked(ctx, q, g.WakeupID, g.IssueID); err != nil {
+					return out, fmt.Errorf("resolve parked review inputs: %w", err)
+				}
+			}
 			if !held && g.SystemRule {
 				waiting, known := systemWaiting[g.IssueID]
 				if !known {
@@ -934,6 +943,26 @@ func (s *IssueWakeupService) pendingInputs(ctx context.Context, workspaceIDs []p
 		last := groups[len(groups)-1]
 		params.AfterOldest, params.AfterWakeupID, params.AfterReserved = last.Oldest, last.WakeupID, last.Reserved
 	}
+}
+
+// reviewInputsParked reports whether a platform rule keeps its inputs while
+// the issue is in backlog (child_review) and the issue is in backlog now.
+func (s *IssueWakeupService) reviewInputsParked(ctx context.Context, q *db.Queries, wakeupID, issueID pgtype.UUID) (bool, error) {
+	w, err := q.LocklessWakeup(ctx, wakeupID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil || !specForRule(w).keepInputsWhileParked {
+		return false, err
+	}
+	issue, err := q.GetIssue(ctx, issueID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return issuestatus.Effective(ctx, q, issue.WorkspaceID, issue.Status) == "backlog", nil
 }
 
 // systemRuleRunWaiting reports whether a platform rule on the issue would
@@ -1475,6 +1504,17 @@ func (s *IssueWakeupService) CheckClaim(ctx context.Context, task db.AgentTaskQu
 		// is claimable while the rule is on and that agent can still run.
 		if !w.Enabled || w.DisabledAt.Valid || w.Revision != source.Revision || w.IssueID != task.IssueID {
 			return ErrWakeupForbidden
+		}
+		// Fork (A rules 4–6): a review run whose every delivery already has a
+		// result (or another reviewer) is not started.
+		if specForRule(w).liveInputs {
+			live, err := reviewRunStillLive(ctx, s.Tasks.Queries, task)
+			if err != nil {
+				return err
+			}
+			if !live {
+				return ErrWakeupForbidden
+			}
 		}
 		agent, err := s.Tasks.Queries.GetAgentInWorkspace(ctx, db.GetAgentInWorkspaceParams{ID: task.AgentID, WorkspaceID: w.WorkspaceID})
 		if errors.Is(err, pgx.ErrNoRows) || (err == nil && (agent.ArchivedAt.Valid || !agent.RuntimeID.Valid)) {

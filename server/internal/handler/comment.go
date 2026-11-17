@@ -2091,6 +2091,16 @@ func (h *Handler) enqueueCommentAgentTriggers(ctx context.Context, issue db.Issu
 		results[uuidToString(trigger.Agent.ID)] = commentEnqueueResult{status: status, reason: reason, execSquadID: execSquadID}
 	}
 	for _, trigger := range triggers {
+		// Fork (A): hold only the delivering run's review target. All three
+		// comment paths (create, completion replay, edit/delete replay) meet here.
+		if held, err := h.deferSubIssueReviewComment(ctx, triggerCommentID, trigger.Agent.ID); err != nil {
+			logDeferredReviewError(triggerCommentID, err)
+			record(trigger, DispatchBlocked, ReasonInternalError)
+			continue
+		} else if held {
+			record(trigger, DispatchDeferred, ReasonDeferred)
+			continue
+		}
 		status, reason := h.resolveCommentTriggerEnqueue(ctx, issue, trigger, triggerCommentID)
 		record(trigger, status, reason)
 	}

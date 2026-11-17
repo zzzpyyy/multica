@@ -240,6 +240,9 @@ type ParentIssueData struct {
 	Identifier string `json:"identifier,omitempty"`
 	Title      string `json:"title"`
 	Status     string `json:"status"`
+	// OwnerIsYou: this run's agent owns the sub-issue and its parent (fork, A
+	// rule 4). Old servers never send it.
+	OwnerIsYou bool `json:"owner_is_you,omitempty"`
 }
 
 // AgentData holds agent details returned by the claim endpoint.

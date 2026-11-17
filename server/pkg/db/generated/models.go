@@ -733,6 +733,27 @@ type Feedback struct {
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 }
 
+type ForkDeferredCommentTrigger struct {
+	CommentID        pgtype.UUID        `json:"comment_id"`
+	AgentID          pgtype.UUID        `json:"agent_id"`
+	SourceTaskID     pgtype.UUID        `json:"source_task_id"`
+	OriginatorUserID pgtype.UUID        `json:"originator_user_id"`
+	WorkspaceID      pgtype.UUID        `json:"workspace_id"`
+	ChildIssueID     pgtype.UUID        `json:"child_issue_id"`
+	Outcome          pgtype.Text        `json:"outcome"`
+	SettledAt        pgtype.Timestamptz `json:"settled_at"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type ForkSubIssueReview struct {
+	IssueID        pgtype.UUID        `json:"issue_id"`
+	WorkspaceID    pgtype.UUID        `json:"workspace_id"`
+	ReviewRound    int32              `json:"review_round"`
+	DeliveryTaskID pgtype.UUID        `json:"delivery_task_id"`
+	EnteredAt      pgtype.Timestamptz `json:"entered_at"`
+	SettledAt      pgtype.Timestamptz `json:"settled_at"`
+}
+
 type GithubInstallation struct {
 	ID               pgtype.UUID        `json:"id"`
 	WorkspaceID      pgtype.UUID        `json:"workspace_id"`

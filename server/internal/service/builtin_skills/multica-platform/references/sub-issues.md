@@ -1,3 +1,4 @@
+<!-- Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md. -->
 # Sub-issues
 
 Whether to split an issue, and how sub-issues and stages start, order and wake
@@ -102,6 +103,20 @@ terminal children.
 Read each sub-issue's description before promoting and only promote items whose
 stated dependencies are met; if a description conflicts with the parent's
 breakdown, leave it `backlog` and comment to confirm first.
+
+### Review wakeup: the parent's owner reviews each delivery
+
+When a sub-issue is delivered to `in_review`, the platform wakes the **parent's
+owner** to review it once **the delivering run (and its retries) has ended**:
+the parent's agent, or the leader when a squad owns the parent. The `[WAKEUP]`
+block carries one `sub_issue.review_requested` fact per delivery, with its
+`review_round` and the comments the delivering run addressed to the reviewer;
+those comments are folded into this wakeup instead of starting a separate run.
+A parent in `backlog` keeps the input and is woken once it leaves backlog.
+There is no wakeup when the parent belongs to a member or has no assignee (the
+person reviews it), or when the reviewer delivered it itself (deliver straight
+to `done`). Do not create your own "wait until this sub-issue is in_review"
+wakeup as well: you would be woken twice for the same delivery.
 
 ## Incorrect to correct
 

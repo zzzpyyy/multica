@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -145,7 +146,7 @@ func TestListIssueAttention(t *testing.T) {
 		}
 	}
 
-	// SB4a: in_review_by_others is present and empty until rules 4–6 ship.
+	// None of these parents has an assignee: in_review_by_others is empty.
 	var raw map[string]json.RawMessage
 	testutil.Call(t, testHandler.ListIssueAttention, newRequest(http.MethodGet, "/api/issues/attention", nil)).
 		Want(http.StatusOK).JSON(&raw)
@@ -163,4 +164,102 @@ func TestListIssueAttention(t *testing.T) {
 	if _, ok := index(response.InReview)[grandchild]; ok {
 		t.Fatalf("in_review still lists %s after it was closed", grandchild)
 	}
+}
+
+// Fork (A rule 4, SB4b): every in-review issue is in exactly one list, and
+// the split is service.ResolveSubIssueReviewer's.
+func TestListIssueAttentionByReviewer(t *testing.T) {
+	suffix := time.Now().UnixNano()
+	other := dbfx.User(t, fmt.Sprintf("rv other %d", suffix), fmt.Sprintf("rv-other-%d@example.com", suffix))
+	dbfx.Member(t, testWorkspaceID, other, "member")
+	gone := dbfx.User(t, fmt.Sprintf("rv gone %d", suffix), fmt.Sprintf("rv-gone-%d@example.com", suffix))
+	la := dbfx.Agent(t, fmt.Sprintf("rv LA %d", suffix), testRuntimeID)
+	ma := dbfx.Agent(t, fmt.Sprintf("rv MA %d", suffix), testRuntimeID)
+	archived := dbfx.Agent(t, fmt.Sprintf("rv archived %d", suffix), testRuntimeID, testutil.Cols{"archived_at": testutil.Raw("now()")})
+	noRuntime := dbfx.Agent(t, fmt.Sprintf("rv no runtime %d", suffix), testRuntimeID)
+	dbfx.Exec(t, `UPDATE agent SET runtime_id = NULL WHERE id = $1`, noRuntime)
+	sq := dbfx.Squad(t, fmt.Sprintf("rv SQ %d", suffix), la)
+	issue := func(title string, cols testutil.Cols) string {
+		return dbfx.Issue(t, fmt.Sprintf("rv %s %d", title, suffix), cols)
+	}
+	parent := func(title, typ, id string) string {
+		cols := testutil.Cols{"status": "in_progress"}
+		if typ != "" {
+			cols["assignee_type"], cols["assignee_id"] = typ, id
+		}
+		return issue(title, cols)
+	}
+	child := func(title, parentID, typ, id string) string {
+		cols := testutil.Cols{"status": "in_review", "parent_issue_id": parentID}
+		if typ != "" {
+			cols["assignee_type"], cols["assignee_id"] = typ, id
+		}
+		return issue(title, cols)
+	}
+	type want struct{ list, typ, id string }
+	cases := map[string]want{}
+	add := func(id string, w want) { cases[id] = w }
+	add(issue("top", testutil.Cols{"status": "in_review", "assignee_type": "squad", "assignee_id": sq}), want{list: "mine"})
+	add(child("unowned parent", parent("p none", "", ""), "agent", ma), want{list: "mine"})
+	add(child("parent is me", parent("p me", "member", testUserID), "agent", ma), want{list: "mine"})
+	add(child("parent other member", parent("p other", "member", other), "agent", ma), want{"others", "member", other})
+	add(child("parent member left", parent("p gone", "member", gone), "agent", ma), want{list: "mine"})
+	add(child("parent agent", parent("p LA", "agent", la), "agent", ma), want{"others", "agent", la})
+	kSquad := child("parent squad", parent("p SQ", "squad", sq), "agent", ma)
+	add(kSquad, want{"others", "agent", la})
+	add(child("grandchild", kSquad, "agent", la), want{"others", "agent", ma}) // its parent is kSquad, owned by MA
+	add(child("parent archived", parent("p archived", "agent", archived), "agent", ma), want{list: "mine"})
+	add(child("parent no runtime", parent("p no runtime", "agent", noRuntime), "agent", ma), want{list: "mine"})
+	add(child("self", parent("p self", "agent", la), "agent", la), want{list: "mine"})
+	add(child("self via squads", parent("p self squad", "squad", sq), "squad", sq), want{list: "mine"})
+
+	read := func() (map[string]bool, map[string]issueReviewerRef) {
+		var response issueAttentionResponse
+		testutil.Call(t, testHandler.ListIssueAttention, newRequest(http.MethodGet, "/api/issues/attention", nil)).
+			Want(http.StatusOK).JSON(&response)
+		mine := map[string]bool{}
+		for _, item := range response.InReview {
+			mine[item.IssueID] = true
+		}
+		others := map[string]issueReviewerRef{}
+		for _, item := range response.InReviewByOthers {
+			if _, dup := others[item.IssueID]; dup {
+				t.Fatalf("%s listed twice in in_review_by_others", item.IssueID)
+			}
+			others[item.IssueID] = item.Reviewer
+		}
+		return mine, others
+	}
+	mine, others := read()
+	for id, w := range cases {
+		reviewer, isOther := others[id]
+		if mine[id] == isOther {
+			t.Fatalf("%s: in_review=%v in_review_by_others=%v, want exactly one", id, mine[id], isOther)
+		}
+		switch w.list {
+		case "mine":
+			if !mine[id] {
+				t.Fatalf("%s: want in in_review, got reviewer %+v", id, reviewer)
+			}
+		case "others":
+			if reviewer != (issueReviewerRef{Type: w.typ, ID: w.id}) {
+				t.Fatalf("%s: reviewer = %+v, want %s %s", id, reviewer, w.typ, w.id)
+			}
+		}
+	}
+	// Invariant over the whole workspace: every in-review issue is in one list.
+	rows, err := testPool.Query(context.Background(), `SELECT id FROM issue WHERE workspace_id = $1 AND status = 'in_review'`, testWorkspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			t.Fatal(err)
+		}
+		if _, isOther := others[id]; mine[id] == isOther {
+			t.Fatalf("%s: in_review=%v in_review_by_others=%v", id, mine[id], isOther)
+		}
+	}
+	rows.Close()
 }

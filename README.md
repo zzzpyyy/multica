@@ -161,6 +161,11 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 
 合并一个新的上游版本时，在同一个提交里把 `scripts/fork/lib.sh` 的 `FORK_BASELINE` 改成那个版本的 commit。然后对照下面的登记表逐个核对改动点，重跑两个检查脚本和全部验收。
 
+另外两处测试覆盖不到，每次合并都要人工核对：
+
+- **评论触发的入队路径**：子任务验收时扣住交付评论，靠的是 `server/internal/handler/comment.go` 的 `enqueueCommentAgentTriggers`，现在发评论、运行结束补投、改删评论重投三条路径都经过它。合并后查一遍 `computeCommentAgentTriggers` 的所有调用点，确认算出的触发都交给了 `enqueueCommentAgentTriggers`；上游新加的入队路径要接过来。
+- **迁移 555 的 CHECK**：9009 把 `issue_wakeup.system_rule` 的 CHECK 换成 `('child_done', 'child_review')`。上游以后重写这个 CHECK 时，它的迁移会因为库里已有 `child_review` 行而失败。合并时在上游那个迁移的列表里加上 `child_review`，并按 G8 给那个文件加文件头。
+
 ### 改动登记
 
 新增的文件不登记。"验收"列是本 fork 需求文档里的验收编号。
@@ -196,6 +201,17 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 | `server/internal/daemon/types.go`、`client.go`、`prompt.go`、`daemon.go` | daemon 声明 `multica-fork-v1`，认 `instance` 字段，提示词里加实例块 | D2–D4 |
 | `server/internal/daemon/execenv/execenv.go`、`local_worktree.go`、`local_worktree_test.go` | worktree 模式下实例用按运行生成的分支，不共用任务分支 | D2 |
 | `server/internal/service/task_channel_media_race_test.go`、`server/internal/handler/workspace_delete_manifest_test.go` | 唯一索引改名；新表 `agent_task_batch` 归入删工作区的清单 | D |
+| `server/internal/service/issue_wakeup_system.go`、`issue_wakeup_join.go`、`issue_wakeup.go` | 第二条平台规则 `child_review`（子任务验收唤醒）：两条规则不同的地方按规则名查表（`systemRuleSpecs`，在 `fork_sub_issue_review.go`）；父任务在 backlog 时保留验收输入；开跑前、并入运行时、领取时丢掉已经过期的验收输入；不做每小时暂停，不发收件箱 | A24、A25、A29–A31、A34、A35、A38 |
+| `server/pkg/db/queries/workspace_wakeup.sql` | 唤醒列表里的平台规则只列 `child_done`：`child_review` 没有开关 | A24 |
+| `server/pkg/db/queries/issue.sql`、`workspace_delete.sql`（验收） | 删任务、删工作区时删掉 `fork_sub_issue_review`、`fork_deferred_comment_trigger`（新表没有外键） | A24–A28 |
+| `server/cmd/migrate/main.go`（验收） | 登记 9010、9011 的并发索引 | A24 |
+| `server/internal/handler/comment.go`（`enqueueCommentAgentTriggers`） | 交付运行发给验收智能体的评论（含回到 leader 的隐式路由）先扣住，运行结束后并进验收唤醒或放行 | A24、A33、A36 |
+| `server/cmd/server/main.go`（验收） | 注册验收结算的监听和 30 秒兜底扫描 | A24、A33 |
+| `server/internal/handler/agent.go`、`daemon.go`（`owner_is_you`）、`server/internal/daemon/types.go`、`prompt.go` 及测试 | 领取响应的 `parent_issue.owner_is_you`：这次运行的智能体同时是子任务和父任务的负责人（小队按 leader 算）；[Parent issue] 块据此多一句；验收唤醒的提示不再说"成员可以管理" | A35 |
+| `server/internal/daemon/execenv/runtime_config_sections.go`、`runtime_config_test.go` | 简报状态规则最后一句：子任务的 done 由父任务负责人在验收唤醒里设置，顶层任务的 done 留给人；验收人就是交付人时直接置 done | A32、A35 |
+| `server/internal/handler/squad_briefing.go`、`squad_parent_status_contract_test.go` | 小队协议第 6 条：顶层任务的 done 留给人，子任务的 done 由父任务负责人验收后设置 | A32 |
+| `server/internal/service/builtin_skills/multica-platform/references/sub-issues.md` | 平台说明补上验收唤醒，leader 不用再给子任务建"等它进入 in_review"的唤醒 | A32 |
+| `server/internal/handler/fork_issue_attention.go`（按验收人分） | `in_review` 只列等你验收的（顶层任务、没人能来验收的子任务），`in_review_by_others` 列别人验收的子任务和验收人；规则只在 `service.ResolveSubIssueReviewer` 里写一次 | A2、A31、A34、N32、N34、N35 |
 | `packages/core/shortcuts/definitions.ts`、`store.test.ts` | 「发送」默认改成 Enter | C1–C10 |
 | `packages/views/editor/extensions/submit-shortcut.ts`、`index.ts`、`content-editor.tsx`、`title-editor.tsx` 及测试 | 提交键分两类：发一条消息（跟随设置，设为 Enter 时 ⌘+Enter 也发）、长文本（固定 ⌘+Enter）；按住提交键不重复提交、不插空行 | C1–C17 |
 | `packages/views/modals/create-issue.tsx`、`feedback.tsx`、`run-confirm.tsx`、`issues/components/wakeup-create.tsx`、`squads/components/squad-detail-page.tsx`、`settings/components/issue-statuses-tab.tsx`、`quick-actions/components/quick-action-dialog.tsx` 及测试 | 长文本类输入框和运行确认弹窗固定 ⌘+Enter；状态说明补输入法判断；快捷操作的提示词新增 ⌘+Enter 提交 | C11、C12、C14–C17 |

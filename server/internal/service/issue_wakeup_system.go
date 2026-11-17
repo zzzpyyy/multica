@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package service
 
 import (
@@ -463,11 +465,17 @@ func (s *IssueWakeupService) dispatchSystem(ctx context.Context, prev db.IssueWa
 		}
 		return tx.Commit(ctx)
 	}
+	// Fork (A rules 4–6): what differs between child_done and child_review.
+	spec := specForRule(w)
 	// A parked parent holds: nothing fires and nothing is marked as seen, so
 	// a stage that closed meanwhile wakes the assignee once it leaves backlog.
+	// A review input has no condition to re-evaluate later, so it is kept
+	// pending as it is and fires on the first pass after backlog.
 	if issuestatus.Effective(ctx, q, issue.WorkspaceID, issue.Status) == "backlog" {
-		if _, _, err = consumeConditionHints(ctx, tx, w.ID); err != nil {
-			return err
+		if !spec.keepInputsWhileParked {
+			if _, _, err = consumeConditionHints(ctx, tx, w.ID); err != nil {
+				return err
+			}
 		}
 		return tx.Commit(ctx)
 	}
@@ -475,26 +483,28 @@ func (s *IssueWakeupService) dispatchSystem(ctx context.Context, prev db.IssueWa
 	if err = tx.QueryRow(ctx, "SELECT now()").Scan(&now); err != nil {
 		return err
 	}
-	_, causes, err := consumeConditionHints(ctx, tx, w.ID)
-	if err != nil {
-		return err
-	}
-	met, fingerprint, observed, err := s.evaluateCondition(ctx, tx, q, w)
-	if err != nil {
-		return err
-	}
-	state := w.ConditionState
-	switch {
-	case met && fingerprint != state:
-		if err = recordConditionMet(ctx, q, w, observed, causes, now); err != nil {
+	if spec.hasCondition {
+		_, causes, err := consumeConditionHints(ctx, tx, w.ID)
+		if err != nil {
 			return err
 		}
-		state = fingerprint
-	case !met:
-		state = ""
-	}
-	if err = q.SetWakeupConditionState(ctx, db.SetWakeupConditionStateParams{ID: w.ID, ConditionState: state}); err != nil {
-		return err
+		met, fingerprint, observed, err := s.evaluateCondition(ctx, tx, q, w)
+		if err != nil {
+			return err
+		}
+		state := w.ConditionState
+		switch {
+		case met && fingerprint != state:
+			if err = recordConditionMet(ctx, q, w, observed, causes, now); err != nil {
+				return err
+			}
+			state = fingerprint
+		case !met:
+			state = ""
+		}
+		if err = q.SetWakeupConditionState(ctx, db.SetWakeupConditionStateParams{ID: w.ID, ConditionState: state}); err != nil {
+			return err
+		}
 	}
 	receipts, err := q.ListPendingWakeupReceipts(ctx, db.ListPendingWakeupReceiptsParams{WakeupID: w.ID, Revision: w.Revision})
 	if err != nil {
@@ -535,7 +545,7 @@ func (s *IssueWakeupService) dispatchSystem(ctx context.Context, prev db.IssueWa
 		if err = q.CountWakeupFires(ctx, w.ID); err != nil {
 			return err
 		}
-		facts := childDoneFacts(run.receipts)
+		facts := spec.facts(run.receipts)
 		facts["target_type"], facts["target_id"] = "agent", util.UUIDToString(run.task.AgentID)
 		if current.Agent.ID == run.task.AgentID {
 			facts["target_type"], facts["target_id"] = current.Type, util.UUIDToString(current.ID)
@@ -545,11 +555,31 @@ func (s *IssueWakeupService) dispatchSystem(ctx context.Context, prev db.IssueWa
 			return err
 		}
 	}
+	// A review input whose delivery already has a result, or that another
+	// reviewer now owns, is dropped before anything runs (rule 6 step 0 is the
+	// agent's own guard).
+	if spec.liveInputs && len(receipts) > 0 {
+		live, stale, err := splitLiveReviewInputs(ctx, q, issue.ID, current.Agent.ID, receipts)
+		if err != nil {
+			return err
+		}
+		if len(stale) > 0 {
+			if err = q.ConsumeWakeupReceipts(ctx, db.ConsumeWakeupReceiptsParams{Ids: receiptIDs(stale)}); err != nil {
+				return err
+			}
+			facts := spec.facts(stale)
+			facts["outcome"] = wakeupOutcomeNoAction
+			if err = note(wakeupActivityTriggered, facts); err != nil {
+				return err
+			}
+		}
+		receipts = live
+	}
 	if len(receipts) == 0 {
 		return commit()
 	}
 	ids := receiptIDs(receipts)
-	facts := childDoneFacts(receipts)
+	facts := spec.facts(receipts)
 	if current.Type != "none" {
 		facts["target_type"], facts["target_id"] = current.Type, util.UUIDToString(current.ID)
 	}
@@ -557,7 +587,7 @@ func (s *IssueWakeupService) dispatchSystem(ctx context.Context, prev db.IssueWa
 	// assignee whose agent cannot run.
 	if current.Type == "member" || !current.Agent.ID.Valid {
 		facts["outcome"] = "none"
-		if current.Type == "member" {
+		if current.Type == "member" && spec.notifyMember {
 			facts["outcome"] = "notified"
 			details, _ := json.Marshal(facts)
 			item, inserted, err := inboxwriter.CreateIfEligible(ctx, q, db.CreateInboxItemParams{
@@ -594,9 +624,9 @@ func (s *IssueWakeupService) dispatchSystem(ctx context.Context, prev db.IssueWa
 	}
 	instruction := w
 	if ws, e := q.GetWorkspace(ctx, issue.WorkspaceID); e == nil {
-		instruction.Instruction = ChildDoneInstruction(w.Instruction, ws.Settings)
+		instruction.Instruction = spec.instructionFor(w, ws.Settings)
 	} else {
-		instruction.Instruction = ChildDoneInstruction(w.Instruction, nil)
+		instruction.Instruction = spec.instructionFor(w, nil)
 	}
 	noteText, evidence := mergeWakeupEvidence(instruction, task, receipts)
 	if taskExists {
@@ -641,14 +671,14 @@ func (s *IssueWakeupService) dispatchSystem(ctx context.Context, prev db.IssueWa
 	if err != nil {
 		return err
 	}
-	if recent >= wakeupHourlyRunLimit {
+	if spec.hourlyLimit && recent >= wakeupHourlyRunLimit {
 		if err = q.PauseIssueWakeup(ctx, db.PauseIssueWakeupParams{ID: w.ID, PausedReason: pgtype.Text{String: wakeupPausedRate, Valid: true}, BlockRuns: true}); err != nil {
 			return err
 		}
 		if err = q.DiscardWakeupReceipts(ctx, w.ID); err != nil {
 			return err
 		}
-		if err = note(wakeupActivityPaused, map[string]any{"rule": SystemRuleChildDone, "reason": wakeupPausedRate, "limit": wakeupHourlyRunLimit}); err != nil {
+		if err = note(wakeupActivityPaused, map[string]any{"rule": spec.rule, "reason": wakeupPausedRate, "limit": wakeupHourlyRunLimit}); err != nil {
 			return err
 		}
 		return commit()
@@ -658,10 +688,10 @@ func (s *IssueWakeupService) dispatchSystem(ctx context.Context, prev db.IssueWa
 	}
 	overlay := s.Tasks.buildRuntimeMCPOverlay(ctx, attr.UserID, agent)
 	source, delegatedFrom, _, _ := attributionCreateParams(attr)
-	contextJSON, _ := json.Marshal(map[string]any{"wakeup_id": util.UUIDToString(w.ID), "wakeup_revision": w.Revision, "wakeup_evidence": evidence, "wakeup_system": SystemRuleChildDone})
+	contextJSON, _ := json.Marshal(map[string]any{"wakeup_id": util.UUIDToString(w.ID), "wakeup_revision": w.Revision, "wakeup_evidence": evidence, "wakeup_system": spec.rule})
 	task, err = q.CreateWakeupTask(ctx, db.CreateWakeupTaskParams{
 		ID: dbid.NewV7(), AgentID: agent.ID, RuntimeID: agent.RuntimeID, IssueID: issue.ID, Priority: priorityToInt(issue.Priority),
-		TriggerSummary: pgtype.Text{String: "Wakeup: sub-issues closed", Valid: true}, HandoffNote: pgtype.Text{String: noteText, Valid: true},
+		TriggerSummary: pgtype.Text{String: spec.summary, Valid: true}, HandoffNote: pgtype.Text{String: noteText, Valid: true},
 		IsLeaderTask: pgtype.Bool{Bool: current.Type == "squad", Valid: current.Type == "squad"}, SquadID: current.SquadID,
 		OriginatorUserID: attr.UserID, AccountableUserID: attr.AccountableUserID, OriginatorSource: source, DelegatedFromTaskID: delegatedFrom,
 		RuleVersionID: attr.RuleVersionID, TriggerEvidenceKind: pgtype.Text{String: "issue_wakeup", Valid: true}, TriggerEvidenceRefID: w.ID,

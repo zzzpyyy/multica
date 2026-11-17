@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package execenv
 
 import (
@@ -208,8 +210,10 @@ func TestStatusRuleIsFactJudgmentAtBothMoments(t *testing.T) {
 		"the board should show the issue being worked while you work, not only after",
 		// No assignee gate: the judgment applies to whoever is running.
 		"whoever the assignee is",
-		// Delivery lands in in_review and the ceiling keeps `done` human.
-		"`done` stays human",
+		// Fork (A rules 4–6): a sub-issue's done is its parent owner's; a
+		// top-level issue's stays human; the reviewer-delivers exception.
+		"A sub-issue's `done` is set by its parent's owner (the leader, when a squad owns the parent) in the platform's review wakeup, and a top-level issue's `done` stays human: never set `done` on an issue you delivered.",
+		"Exception: when you own this sub-issue's parent yourself (or lead the squad that owns it), deliver it straight to `done`, not `in_review`; the [Parent issue] block says when this applies.",
 		// Assigned deliverables must not be misread as status-neutral
 		// research: stage barriers and parent notifications key off the
 		// delivery write.
@@ -240,6 +244,7 @@ func TestStatusRuleIsFactJudgmentAtBothMoments(t *testing.T) {
 		"when this issue is assigned to you and this turn does substantive work on it",
 		"set `in_progress` when you start",
 		"Before step 3, run `multica issue status",
+		"`done` stays human.\n", // fork: replaced by the parent-owner review sentences
 		"judge once, at the end of the turn",
 		"do not open with a status write",
 		// The example that misled the MUL-6460 run: research that IS the
