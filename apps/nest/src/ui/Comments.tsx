@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ApiError, createComment, listComments, type Comment } from "../api";
 import { draftKey } from "../composer";
-import { commentInstance } from "../model";
+import { commentInstance, type Names } from "../model";
 import { keys, q } from "../queries";
 import { Composer, type SendResult } from "./Composer";
 import { useWorkspace } from "./context";
@@ -154,6 +154,25 @@ export function Comments({ issueId, focusCommentId }: { issueId: string; focusCo
   );
 }
 
+/**
+ * Who wrote a comment (PRD v4 3.5.2): a member, an agent, the super-agent, or
+ * the platform itself. Only "member" is a member; anything else that is not
+ * an agent (today "system", e.g. the instance batch summary) is 系统, with no
+ * member name looked up.
+ */
+export function commentAuthor(comment: Pick<Comment, "author_type" | "author_id">, names: Names): { who: string; kind: string; badge: string } {
+  if (comment.author_type === "agent") {
+    const isSuper = comment.author_id === names.superAgentId;
+    return {
+      who: names.agent(comment.author_id) ?? "智能体",
+      kind: isSuper ? "super-agent" : "智能体",
+      badge: isSuper ? "super" : "agent",
+    };
+  }
+  if (comment.author_type === "member") return { who: names.member(comment.author_id) ?? "成员", kind: "成员", badge: "member" };
+  return { who: "系统", kind: "系统", badge: "system" };
+}
+
 /** "实例 i/k · <分工>" beside the author of a comment an instance wrote; the split truncates, "实例 i/k" never does. */
 export function InstanceTag({ comment }: { comment: Comment }) {
   const { slug } = useWorkspace();
@@ -175,11 +194,7 @@ function CommentItem({ comment, highlight }: { comment: Comment; highlight: bool
   const body = useRef<HTMLDivElement>(null);
   const [long, setLong] = useState(false);
   const [open, setOpen] = useState(false);
-  const isSuper = comment.author_type === "agent" && comment.author_id === names.superAgentId;
-  const kind = isSuper ? "super-agent" : comment.author_type === "agent" ? "智能体" : "成员";
-  const who =
-    (comment.author_type === "agent" ? names.agent(comment.author_id) : names.member(comment.author_id)) ??
-    (comment.author_type === "agent" ? "智能体" : "成员");
+  const { who, kind, badge } = commentAuthor(comment, names);
 
   // Longer than 20 rendered lines: collapsed (measured, not counted in source).
   useLayoutEffect(() => {
@@ -191,7 +206,7 @@ function CommentItem({ comment, highlight }: { comment: Comment; highlight: bool
     <article id={`comment-${comment.id}`} className={`comment${highlight ? " highlight" : ""}`} data-comment-id={comment.id}>
       <header>
         <strong>{who}</strong>
-        <span className={`badge badge-${isSuper ? "super" : comment.author_type}`}>{kind}</span>
+        <span className={`badge badge-${badge}`}>{kind}</span>
         <InstanceTag comment={comment} />
         <time dateTime={comment.created_at}>{formatTime(comment.created_at)}</time>
       </header>
