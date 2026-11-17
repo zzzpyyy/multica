@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ApiError, createComment, listComments, type Comment } from "../api";
 import { draftKey } from "../composer";
+import { commentInstance } from "../model";
 import { keys, q } from "../queries";
 import { Composer, type SendResult } from "./Composer";
 import { useWorkspace } from "./context";
@@ -153,6 +154,22 @@ export function Comments({ issueId, focusCommentId }: { issueId: string; focusCo
   );
 }
 
+/** "实例 i/k · <分工>" beside the author of a comment an instance wrote; the split truncates, "实例 i/k" never does. */
+export function InstanceTag({ comment }: { comment: Comment }) {
+  const { slug } = useWorkspace();
+  // The issue's one instances query, shared with its 实例 section.
+  const { data } = useQuery({ ...q.instances(slug, comment.issue_id), enabled: !!comment.source_task_id });
+  const inst = commentInstance(data ?? [], comment.source_task_id);
+  if (!inst) return null;
+  const n = `实例 ${inst.index}/${inst.total}`;
+  return (
+    <span className="instance-tag" title={`${n} · ${inst.split}`} data-testid="instance-tag">
+      <span className="instance-n">{n}</span>
+      <span className="instance-split"> · {inst.split}</span>
+    </span>
+  );
+}
+
 function CommentItem({ comment, highlight }: { comment: Comment; highlight: boolean }) {
   const { names } = useWorkspace();
   const body = useRef<HTMLDivElement>(null);
@@ -175,6 +192,7 @@ function CommentItem({ comment, highlight }: { comment: Comment; highlight: bool
       <header>
         <strong>{who}</strong>
         <span className={`badge badge-${isSuper ? "super" : comment.author_type}`}>{kind}</span>
+        <InstanceTag comment={comment} />
         <time dateTime={comment.created_at}>{formatTime(comment.created_at)}</time>
       </header>
       {comment.deleted_at ? (

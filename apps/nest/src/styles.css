@@ -86,7 +86,13 @@ a:hover { text-decoration: underline; }
 .thread { border-top: 1px solid var(--line); padding: 8px 0; }
 .reply { margin-left: 24px; }
 .comment header { display: flex; gap: 8px; align-items: center; font-size: 12px; }
-.comment header time { color: var(--muted); }
+.comment header time { color: var(--muted); flex-shrink: 0; }
+.comment header { min-width: 0; }
+.comment header strong, .comment header .badge { flex-shrink: 0; }
+/* "实例 i/k" stays whole; only the split after it gives way. */
+.instance-tag { display: inline-flex; min-width: 0; max-width: 260px; font-size: 12px; color: var(--muted); background: var(--panel); border-radius: 4px; padding: 0 6px; white-space: nowrap; }
+.instance-n { flex-shrink: 0; }
+.instance-split { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .comment.highlight, .msg.highlight { background: var(--highlight); }
 /* Folded: exactly 20 whole lines, counted across paragraphs and lists, no
    half line. The first and last margins go so the box is the lines alone. */

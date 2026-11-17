@@ -5,7 +5,7 @@
 // Ceiling: Nest reads every issue of the workspace once (api.ts
 // listAllIssues) and builds the tree here. Fine for the ~60 issues of today;
 // past ~2000 switch to open issues in one read plus closed ones per top-level.
-import type { Agent, Attention, Issue, Member, SnapshotTask, Squad, StatusEntry } from "./api";
+import type { Agent, Attention, InstanceBatch, Issue, Member, SnapshotTask, Squad, StatusEntry } from "./api";
 
 // ── Statuses ────────────────────────────────────────────────────────────
 
@@ -309,6 +309,22 @@ export function runCounts(runs: RunIndex, issueId: string, n: Names): string[] {
     const who = n.agent(c.agentId) ?? "智能体";
     return c.queued > 0 ? `${who} 运行 ${c.running} · 排队 ${c.queued}` : `${who} 运行 ${c.running}`;
   });
+}
+
+/**
+ * Which instance wrote a comment (D rule 7): its source_task_id is one of the
+ * instance's attempts. Same reading as the old page's findTaskInstance.
+ */
+export function commentInstance(
+  batches: readonly InstanceBatch[],
+  sourceTaskId: string | null | undefined,
+): { index: number; total: number; split: string } | null {
+  if (!sourceTaskId) return null;
+  for (const b of batches) {
+    const i = b.instances.find((x) => x.task_id === sourceTaskId || (x.task_ids ?? []).includes(sourceTaskId));
+    if (i) return { index: i.index, total: b.total, split: i.split };
+  }
+  return null;
 }
 
 // ── Waiting on ──────────────────────────────────────────────────────────

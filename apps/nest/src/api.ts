@@ -95,6 +95,8 @@ export interface Comment {
   updated_at: string;
   deleted_at: string | null;
   attachments: Attachment[];
+  /** The run that wrote it; an instance's comment carries one of its task_ids (D rule 7). */
+  source_task_id?: string | null;
 }
 
 export interface Member {
@@ -202,6 +204,9 @@ export interface Instance {
   split: string;
   status: string;
   queue: InstanceQueue | null;
+  /** Latest attempt, and every attempt oldest first. */
+  task_id?: string;
+  task_ids?: string[];
 }
 
 export interface InstanceBatch {
