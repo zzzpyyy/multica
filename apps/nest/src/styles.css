@@ -43,6 +43,8 @@ a:hover { text-decoration: underline; }
 
 .columns { flex: 1; min-height: 0; display: grid; grid-template-columns: 320px minmax(0, 1fr) 400px; }
 .columns.mode-tree { grid-template-columns: minmax(0, 1fr) 400px; }
+/* "加载任务…" and a load failure stand in for the issue columns; the chat stays in the last one. */
+.span-issues { grid-column: 1 / -2; }
 .left, .middle, .outline, .chat { min-height: 0; overflow-y: auto; }
 .left { border-right: 1px solid var(--line); background: var(--panel); padding: 8px; }
 .middle, .outline { padding: 16px 24px; }

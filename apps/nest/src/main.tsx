@@ -198,7 +198,7 @@ function WorkspacePage({
     <WorkspaceContext.Provider value={value}>
       <div className={`columns mode-${mode}`}>
         {state.kind === "failed" ? (
-          <div className="error center" role="alert">
+          <div className="error center span-issues" role="alert">
             <p>{state.what.join("、")}没加载出来，先不列任务，免得漏掉等你处理的。</p>
             <button
               type="button"
@@ -210,7 +210,7 @@ function WorkspacePage({
             </button>
           </div>
         ) : state.kind === "loading" ? (
-          <p className="muted center">加载任务…</p>
+          <p className="muted center span-issues">加载任务…</p>
         ) : mode === "tree" ? (
           <main className="outline">
             <Tree onOpen={(i) => { onMode("focus"); go(issuePath(slug, i.id)); }} />
