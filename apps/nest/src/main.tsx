@@ -16,7 +16,7 @@ import {
   names,
   topLevelOf,
 } from "./model";
-import { keys, q } from "./queries";
+import { keys, pageState, q } from "./queries";
 import { connect, type EventContext } from "./realtime";
 import { go, issuePath, issuesPath, parse, replace, subscribe, type Route } from "./router";
 import { ChatPanel } from "./ui/Chat";
@@ -152,6 +152,10 @@ function WorkspacePage({
   const projects = useQuery(q.projects(slug));
   const superAgent = useQuery(q.superAgent(slug));
 
+  // Grouping, the picked issue and "在等谁" wait for everything they read (N10).
+  const state = pageState({ issues, statuses, attention, snapshot, names: [members, agents, squads] });
+  const ready = state.kind === "ready";
+
   const data = useMemo<Omit<WorkspaceData, "current">>(() => {
     const tree = buildTree(issues.data ?? []);
     return {
@@ -159,13 +163,13 @@ function WorkspacePage({
       workspace,
       userId: me.id,
       tree,
-      ready: issues.data !== undefined && (statuses.data !== undefined || statuses.isError),
+      ready,
       cat: catalog(statuses.data ?? []),
       att: attention.data ? indexAttention(attention.data) : EMPTY_ATTENTION,
       runs: snapshot.data ? indexRuns(snapshot.data) : EMPTY_RUNS,
       names: names(members.data ?? [], agents.data ?? [], squads.data ?? [], projects.data ?? []),
     };
-  }, [slug, workspace, me.id, issues.data, statuses.data, statuses.isError, attention.data, snapshot.data, members.data, agents.data, squads.data, projects.data]);
+  }, [slug, workspace, me.id, ready, issues.data, statuses.data, attention.data, snapshot.data, members.data, agents.data, squads.data, projects.data]);
 
   // One /ws connection per workspace page; the context it reads is always current.
   const ctxRef = useRef<EventContext>({ slug, sessionId: null, userId: me.id, onRemovedFromWorkspace: () => replace("/") });
@@ -193,10 +197,20 @@ function WorkspacePage({
   return (
     <WorkspaceContext.Provider value={value}>
       <div className={`columns mode-${mode}`}>
-        {!data.ready ? (
+        {state.kind === "failed" ? (
+          <div className="error center" role="alert">
+            <p>{state.what.join("、")}没加载出来，先不列任务，免得漏掉等你处理的。</p>
+            <button
+              type="button"
+              onClick={() => {
+                for (const r of [issues, attention, snapshot]) if (r.isError) void r.refetch();
+              }}
+            >
+              重试
+            </button>
+          </div>
+        ) : state.kind === "loading" ? (
           <p className="muted center">加载任务…</p>
-        ) : issues.isError ? (
-          <p className="error center">任务没加载出来</p>
         ) : mode === "tree" ? (
           <main className="outline">
             <Tree onOpen={(i) => { onMode("focus"); go(issuePath(slug, i.id)); }} />

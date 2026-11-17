@@ -8,7 +8,7 @@ export interface WorkspaceData extends Ctx {
   workspace: Workspace;
   userId: string;
   tree: Tree;
-  /** False until issues and statuses have loaded once. */
+  /** False until everything the issue columns read has loaded once (queries.ts pageState). */
   ready: boolean;
   /** The issue in the middle column, if any. */
   current: Issue | null;

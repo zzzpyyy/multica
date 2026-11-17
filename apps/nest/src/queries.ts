@@ -31,10 +31,7 @@ export const q = {
   workspaces: () => queryOptions({ queryKey: keys.workspaces, queryFn: api.listWorkspaces }),
   issues: (slug: string) => queryOptions({ queryKey: keys.issues(slug), queryFn: () => api.listAllIssues(slug) }),
   statuses: (slug: string) => queryOptions({ queryKey: keys.statuses(slug), queryFn: () => api.listStatuses(slug) }),
-  // An older server without the endpoint, or one before SB4a, degrades to
-  // no counts rather than an error page.
-  attention: (slug: string) =>
-    queryOptions({ queryKey: keys.attention(slug), queryFn: () => api.getAttention(slug), retry: 1 }),
+  attention: (slug: string) => queryOptions({ queryKey: keys.attention(slug), queryFn: () => api.getAttention(slug) }),
   snapshot: (slug: string) => queryOptions({ queryKey: keys.snapshot(slug), queryFn: () => api.getSnapshot(slug) }),
   instances: (slug: string, issueId: string) =>
     queryOptions({ queryKey: keys.instances(slug, issueId), queryFn: () => api.listInstances(slug, issueId) }),
@@ -60,3 +57,53 @@ export const q = {
   pending: (slug: string, sessionId: string) =>
     queryOptions({ queryKey: keys.pending(slug, sessionId), queryFn: () => api.getPendingTask(slug, sessionId) }),
 };
+
+// ── When the issue columns may render (PRD v4 3.1.5, 一鸣 11-17) ───────────
+
+interface Loadable {
+  data: unknown;
+  isError: boolean;
+}
+
+/** What the queries a workspace page's issue columns read look like now. */
+export interface PageQueries {
+  issues: Loadable;
+  statuses: Loadable;
+  attention: Loadable;
+  snapshot: Loadable;
+  /** Names for "等 X", "<智能体> 在做", "等 X 验收". */
+  names: readonly Loadable[];
+}
+
+export type PageState =
+  | { kind: "loading" }
+  /** What is missing; the columns stay hidden rather than group without it. */
+  | { kind: "failed"; what: string[] }
+  | { kind: "ready" };
+
+const settled = (r: Loadable) => r.data !== undefined || r.isError;
+const missing = (r: Loadable) => r.data === undefined && r.isError;
+
+/**
+ * The left groups, the issue `/<slug>/issues` picks and every "在等谁" read
+ * attention, the snapshot and the names. Before those arrive they would say
+ * "nobody waits for you", and the picked issue is never picked again, so the
+ * columns wait for them. A failed attention or snapshot is shown as a failure,
+ * never as nobody waiting. Statuses and names degrade (built-in statuses,
+ * generic names) as before.
+ */
+export function pageState(p: PageQueries): PageState {
+  const what = [
+    missing(p.issues) && "任务",
+    missing(p.attention) && "等你处理的信息",
+    missing(p.snapshot) && "智能体的运行情况",
+  ].filter((x): x is string => !!x);
+  if (what.length > 0) return { kind: "failed", what };
+  const ready =
+    p.issues.data !== undefined &&
+    p.attention.data !== undefined &&
+    p.snapshot.data !== undefined &&
+    settled(p.statuses) &&
+    p.names.every(settled);
+  return ready ? { kind: "ready" } : { kind: "loading" };
+}
