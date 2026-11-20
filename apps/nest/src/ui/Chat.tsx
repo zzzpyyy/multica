@@ -103,6 +103,7 @@ function Conversation({ sessionId, focus }: { sessionId: string; focus: ChatFocu
   const body = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const atBottom = useRef(true);
+  const lastTop = useRef(0);
   const lastCount = useRef(0);
   const prepend = useRef<{ height: number; top: number } | null>(null);
 
@@ -175,7 +176,8 @@ function Conversation({ sessionId, focus }: { sessionId: string; focus: ChatFocu
   const onScroll = () => {
     const el = list.current;
     if (!el) return;
-    atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < AT_BOTTOM;
+    atBottom.current = atBottomAfterScroll(atBottom.current, el, lastTop.current);
+    lastTop.current = el.scrollTop;
     if (atBottom.current) setUnseen(0);
     if (el.scrollTop < 60) void loadOlder();
   };
@@ -298,6 +300,9 @@ function Conversation({ sessionId, focus }: { sessionId: string; focus: ChatFocu
           onClick={() => {
             const el = list.current;
             if (el) el.scrollTop = el.scrollHeight;
+            // At the bottom now, as after a send: a card growing before this
+            // scroll's event must not leave the list short of it.
+            atBottom.current = true;
             setUnseen(0);
           }}
         >
@@ -313,6 +318,23 @@ function Conversation({ sessionId, focus }: { sessionId: string; focus: ChatFocu
       />
     </aside>
   );
+}
+
+/**
+ * Whether the reader is at the bottom after a scroll event. Only the reader
+ * scrolling up (scrollTop going down) leaves it. The scroll event of a
+ * scroll the page made can come a frame late, after a card made the list
+ * taller, and read as far from the bottom (BUNN-31 Fail 1, 马云 15:33Z); a
+ * scroll the page made or content growing never moves scrollTop up, and
+ * content shrinking only does so by clamping it to the bottom.
+ */
+export function atBottomAfterScroll(
+  was: boolean,
+  el: { scrollTop: number; scrollHeight: number; clientHeight: number },
+  lastTop: number,
+): boolean {
+  if (el.scrollHeight - el.scrollTop - el.clientHeight < AT_BOTTOM) return true;
+  return el.scrollTop < lastTop ? false : was;
 }
 
 /**

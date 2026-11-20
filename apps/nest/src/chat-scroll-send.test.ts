@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "./api";
 import { landed, sendQueue } from "./model";
-import { followGrowth } from "./ui/Chat";
+import { atBottomAfterScroll, followGrowth } from "./ui/Chat";
 
 // BUNN-31: the two Chat.tsx fails in 马云's 14:32Z retest, fixed per 一鸣.
 
@@ -46,10 +46,55 @@ describe("at the bottom, a message that grows keeps the list at the bottom (Fail
     expect(FakeObserver.last.observed).toEqual([]);
   });
 
+  it("the scroll event comes with the grown height before the observer: still at the bottom (马云 15:33Z)", () => {
+    // 马云's log: the reply comes in, the page scrolls to the bottom (scrollTop
+    // 4403, 600 px tall); in the same frame the card adds 214 px; the scroll
+    // event of that scroll fires first and reads the taller list, then the
+    // ResizeObserver callback runs.
+    const list = { scrollTop: 4000, scrollHeight: 4600, clientHeight: 600 };
+    let pinned = true;
+    let lastTop = list.scrollTop;
+    const onScroll = () => {
+      pinned = atBottomAfterScroll(pinned, list, lastTop);
+      lastTop = list.scrollTop;
+    };
+    followGrowth(list, {} as Element, () => pinned, FakeObserver as unknown as typeof ResizeObserver);
+    list.scrollHeight = 5003;
+    list.scrollTop = 4403; // the page's own scroll to the bottom
+    list.scrollHeight = 5217; // the card, same frame
+    onScroll();
+    FakeObserver.last.fire();
+    expect(pinned).toBe(true);
+    expect(list.scrollTop).toBe(5217);
+
+    // The reader scrolls up 700 px: off the bottom, a growing card leaves it there.
+    list.scrollTop = 5217 - 600 - 700;
+    onScroll();
+    expect(pinned).toBe(false);
+    list.scrollHeight = 5400;
+    FakeObserver.last.fire();
+    expect(list.scrollTop).toBe(3917);
+
+    // Scrolling down short of the bottom keeps it off; reaching it puts it back.
+    list.scrollTop = 4200;
+    onScroll();
+    expect(pinned).toBe(false);
+    list.scrollTop = 4790;
+    onScroll();
+    expect(pinned).toBe(true);
+
+    // "正在回复…" going away clamps scrollTop down to the bottom: still at the bottom.
+    list.scrollHeight = 5360;
+    list.scrollTop = 4760;
+    onScroll();
+    expect(pinned).toBe(true);
+  });
+
   it("the conversation hooks it up on the list and the wrapper round its messages", () => {
     // Nest's tests have no DOM to run the effect in; the browser check covers it running.
     const src = readFileSync(new URL("./ui/Chat.tsx", import.meta.url), "utf8");
     expect(src).toMatch(/return followGrowth\(list\.current, body\.current, \(\) => atBottom\.current\);/);
+    expect(src).toMatch(/atBottom\.current = atBottomAfterScroll\(atBottom\.current, el, lastTop\.current\);\s*lastTop\.current = el\.scrollTop;/);
     expect(src).toMatch(/ref=\{list\} onScroll=\{onScroll\} data-testid="messages">\s*<div ref=\{body\}>/);
   });
 });
