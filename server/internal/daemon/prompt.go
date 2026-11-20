@@ -20,6 +20,10 @@ func sessionContinuityNoticeFor(task Task) string {
 	if task.ChatSessionID == "" {
 		return execenv.SessionContinuityNoticeIssue
 	}
+	if task.NoTools {
+		// Fork (B): no tools, so no `multica chat history` to read it back.
+		return execenv.SessionContinuityNoticeUnrecoverable
+	}
 	if task.ChatChannelType == execenv.ChannelTypeSlack {
 		return execenv.SessionContinuityNoticeChannelHistory
 	}
@@ -888,7 +892,9 @@ func buildChatPrompt(task Task) string {
 	// has finished thinking the URL embedded in the markdown body may
 	// have expired. `multica attachment download <id>` re-signs at click
 	// time and is the only reliable path.
-	if len(task.ChatMessageAttachments) > 0 {
+	if len(task.ChatMessageAttachments) > 0 && task.NoTools {
+		writeNoToolsChatAttachments(&b, task.ChatMessageAttachments) // Fork (B)
+	} else if len(task.ChatMessageAttachments) > 0 {
 		b.WriteString("\nAttachments on this message:\n")
 		for _, a := range task.ChatMessageAttachments {
 			if a.ContentType != "" {
@@ -919,6 +925,8 @@ func buildChatPrompt(task Task) string {
 	// (MUL-5377). So a channel chat learns how to deliver a file only from the
 	// line below, which means one must be emitted on every turn.
 	switch {
+	case task.NoTools:
+		// Fork (B): a no_tools chat has nothing to upload with.
 	case task.ChatChannelType == "":
 		b.WriteString("\nTo include a file or image you produced in your reply, run `multica attachment upload <local-path>`. The file binds to your reply automatically and appears as an attachment card below it even if you paste nothing. The command also returns a `markdown` snippet you may paste on its own line to place the item where you want it (files render as a card, images inline).\n")
 	case execenv.ChannelCarriesFiles(task.ChatChannelType, task.ChatChannelDeliversFiles):

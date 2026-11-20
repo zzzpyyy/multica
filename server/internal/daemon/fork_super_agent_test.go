@@ -73,3 +73,66 @@ func TestServerPromptReplacesThePrompt(t *testing.T) {
 		t.Fatalf("prompt = %q", got)
 	}
 }
+
+// A no_tools chat turn with attachments names them in plain text and carries
+// no multica command; every other chat turn keeps the download and upload
+// lines, and NoTools leaves non-chat prompts alone (BUNN-31).
+func TestNoToolsChatPromptAttachments(t *testing.T) {
+	t.Parallel()
+	task := Task{
+		ChatSessionID: "s",
+		ChatMessage:   "看下这张截图",
+		ChatMessageAttachments: []ChatAttachmentMeta{
+			{ID: "att-1", Filename: "shot.png", ContentType: "image/png"},
+			{ID: "att-2", Filename: "log.txt"},
+		},
+	}
+	normal := BuildPrompt(task, "claude")
+	for _, want := range []string{"Attachments on this message:\n- id=att-1 filename=\"shot.png\" content_type=image/png\n", "Use `multica attachment download <id>`", "`--attachment-id <id>`", "run `multica attachment upload <local-path>`"} {
+		if !strings.Contains(normal, want) {
+			t.Fatalf("normal chat prompt lost %q:\n%s", want, normal)
+		}
+	}
+
+	task.NoTools = true
+	out := BuildPrompt(task, "claude")
+	if strings.Contains(out, "multica") {
+		t.Fatalf("no_tools chat prompt mentions multica:\n%s", out)
+	}
+	// Same prompt up to the attachments, then one plain line and nothing else.
+	prefix := normal[:strings.Index(normal, "\nAttachments on this message:")]
+	want := prefix + "\nThe user's message has 2 attachment(s): \"shot.png\", \"log.txt\". You cannot open attachments in this chat. If their content matters, say plainly in your reply that you cannot open them.\n"
+	if out != want {
+		t.Fatalf("no_tools chat prompt:\n%s\nwant:\n%s", out, want)
+	}
+
+	// Without attachments the no_tools turn only loses the upload line.
+	task.ChatMessageAttachments = nil
+	if out := BuildPrompt(task, "claude"); strings.Contains(out, "multica") || !strings.HasSuffix(out, "看下这张截图\n") {
+		t.Fatalf("no_tools chat prompt without attachments:\n%s", out)
+	}
+
+	// A turn whose session could not be resumed has no history command either.
+	task.PriorSessionResumeUnavailable = true
+	if out := BuildPrompt(task, "claude"); strings.Contains(out, "multica") || !strings.Contains(out, "could NOT be restored") {
+		t.Fatalf("no_tools chat prompt after a lost session:\n%s", out)
+	}
+	if got := backendResumeContinuityNotice(Task{ChatSessionID: "s", NoTools: true}); strings.Contains(got, "multica") {
+		t.Fatalf("no_tools backend continuity notice mentions multica: %s", got)
+	}
+	task.NoTools = false
+	if out := BuildPrompt(task, "claude"); !strings.Contains(out, "`multica chat history`") {
+		t.Fatalf("normal chat prompt after a lost session lost the history command:\n%s", out)
+	}
+
+	issue := Task{IssueID: "i", TriggerCommentID: "c", TriggerCommentContent: "hi"}
+	for _, lost := range []bool{false, true} {
+		issue.PriorSessionResumeUnavailable = lost
+		issue.NoTools = false
+		before := BuildPrompt(issue, "claude")
+		issue.NoTools = true
+		if BuildPrompt(issue, "claude") != before {
+			t.Fatal("NoTools changed an issue prompt")
+		}
+	}
+}

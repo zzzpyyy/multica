@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/multica-ai/multica/server/pkg/remotemcp"
 )
@@ -71,4 +72,16 @@ func taskLaunchArgs(task Task, extra, custom []string) ([]string, []string) {
 	}
 	out := append(append([]string{}, extra...), noToolsArgs...)
 	return out, nil
+}
+
+// writeNoToolsChatAttachments stands in for the chat prompt's attachment
+// lines in a no_tools chat (BUNN-31). Those tell the model to run `multica
+// attachment download`; the super-agent has no tools, so it is told plainly
+// that it cannot open them.
+func writeNoToolsChatAttachments(b *strings.Builder, atts []ChatAttachmentMeta) {
+	names := make([]string, len(atts))
+	for i, a := range atts {
+		names[i] = fmt.Sprintf("%q", a.Filename)
+	}
+	fmt.Fprintf(b, "\nThe user's message has %d attachment(s): %s. You cannot open attachments in this chat. If their content matters, say plainly in your reply that you cannot open them.\n", len(atts), strings.Join(names, ", "))
 }
