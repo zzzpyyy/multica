@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -9,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/multica-ai/multica/server/internal/daemon/execenv"
+	"github.com/multica-ai/multica/server/pkg/protocol"
 	"github.com/multica-ai/multica/server/pkg/remotemcp"
 )
 
@@ -133,6 +136,62 @@ func TestNoToolsChatPromptAttachments(t *testing.T) {
 		issue.NoTools = true
 		if BuildPrompt(issue, "claude") != before {
 			t.Fatal("NoTools changed an issue prompt")
+		}
+	}
+}
+
+// Web and every channel surface, with and without attachments, a lost
+// session or not: a no_tools chat prompt has no `multica` at all and still
+// names the files. The same turns without no_tools keep their commands.
+func TestNoToolsChatPromptChannels(t *testing.T) {
+	t.Parallel()
+	atts := []ChatAttachmentMeta{{ID: "att-1", Filename: "shot.png", ContentType: "image/png"}}
+	channels := []string{"", execenv.ChannelTypeSlack, execenv.ChannelTypeFeishu, execenv.ChannelTypeWecom, execenv.ChannelTypeDingtalk, execenv.ChannelTypeTelegram}
+	for _, ch := range channels {
+		for _, delivers := range []bool{false, true} {
+			for _, withAtts := range []bool{false, true} {
+				for _, lost := range []bool{false, true} {
+					task := Task{
+						ChatSessionID:                 "s",
+						ChatMessage:                   "hi",
+						ChatChannelType:               ch,
+						ChatChannelDeliversFiles:      delivers,
+						ChatInThread:                  delivers, // both Slack read-order lines
+						ChatSource:                    &protocol.ChatSource{ChannelID: "C1", ChannelName: "general"},
+						PriorSessionResumeUnavailable: lost,
+					}
+					if withAtts {
+						task.ChatMessageAttachments = atts
+					}
+					name := fmt.Sprintf("ch=%q delivers=%v atts=%v lost=%v", ch, delivers, withAtts, lost)
+
+					normal := BuildPrompt(task, "claude") + backendResumeContinuityNotice(task)
+					if !strings.Contains(normal, "`multica ") {
+						t.Fatalf("%s: normal chat prompt has no multica command:\n%s", name, normal)
+					}
+					if ch == execenv.ChannelTypeSlack && !strings.Contains(normal, "`multica chat thread") {
+						t.Fatalf("%s: normal Slack prompt lost the thread command:\n%s", name, normal)
+					}
+					if execenv.SurfacePersistsTranscript(ch) && !strings.Contains(normal, "`multica chat history`") {
+						t.Fatalf("%s: normal prompt lost the history command:\n%s", name, normal)
+					}
+
+					task.NoTools = true
+					out := BuildPrompt(task, "claude") + backendResumeContinuityNotice(task)
+					if strings.Contains(out, "multica") {
+						t.Fatalf("%s: no_tools chat prompt mentions multica:\n%s", name, out)
+					}
+					if !strings.Contains(out, "User message:\nhi\n") {
+						t.Fatalf("%s: no_tools chat prompt lost the user message:\n%s", name, out)
+					}
+					if withAtts != strings.Contains(out, `"shot.png"`) {
+						t.Fatalf("%s: no_tools chat prompt file names:\n%s", name, out)
+					}
+					if ch != "" && !strings.Contains(out, "Reply to "+channelDisplayName(ch)+" with the final outcome only.") {
+						t.Fatalf("%s: no_tools channel prompt lost the reply line:\n%s", name, out)
+					}
+				}
+			}
 		}
 	}
 }

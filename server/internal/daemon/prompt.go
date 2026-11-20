@@ -824,7 +824,9 @@ func buildChatPrompt(task Task) string {
 	if task.ChatChannelType != "" {
 		platform := channelDisplayName(task.ChatChannelType)
 		fmt.Fprintf(&b, "You are operating inside a %s conversation — not the Multica web app. Never look in Multica issues or comments for this conversation.\n", platform)
-		if task.ChatChannelType == execenv.ChannelTypeSlack {
+		if task.NoTools {
+			// Fork (B): no tools, so no `multica chat history` / `chat thread` lines.
+		} else if task.ChatChannelType == execenv.ChannelTypeSlack {
 			if source := protocol.SafeSlackSource(task.ChatSource); source != nil {
 				data, _ := json.Marshal(source)
 				// Escape backticks as well as JSON/HTML metacharacters so an
