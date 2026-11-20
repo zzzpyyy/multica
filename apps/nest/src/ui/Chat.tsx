@@ -3,7 +3,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ApiError, ensureSuperAgent, messagesPage, sendMessage, type ChatMessage, type PlanCard } from "../api";
 import { draftKey } from "../composer";
-import { compareTime, landed, type Attempt } from "../model";
+import { compareTime, sendQueue, type Attempt } from "../model";
 import { keys, q } from "../queries";
 import { mergeMessage } from "../realtime";
 import { Composer, type SendResult } from "./Composer";
@@ -100,6 +100,7 @@ function Conversation({ sessionId, focus }: { sessionId: string; focus: ChatFocu
   const [highlight, setHighlight] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const list = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const atBottom = useRef(true);
   const lastCount = useRef(0);
@@ -157,6 +158,13 @@ function Conversation({ sessionId, focus }: { sessionId: string; focus: ChatFocu
     lastCount.current = total;
   }, [messages.length, local.length]);
 
+  // At the bottom, the list also follows a message that grows without a new
+  // one coming in: a plan card loading after its reply (BUNN-31 Fail 1).
+  useEffect(() => {
+    if (!list.current || !body.current) return;
+    return followGrowth(list.current, body.current, () => atBottom.current);
+  }, []);
+
   const loadOlder = useCallback(async () => {
     const el = list.current;
     if (!el || !pages.hasNextPage || pages.isFetchingNextPage) return;
@@ -187,7 +195,12 @@ function Conversation({ sessionId, focus }: { sessionId: string; focus: ChatFocu
       handled.current = focusKey;
       const id = focus.messageId;
       setHighlight(id);
-      requestAnimationFrame(() => document.getElementById(`msg-${id}`)?.scrollIntoView({ block: "center" }));
+      // Off the bottom from here on, before the scroll event says so: a card
+      // loading meanwhile must not pull the list away from this message.
+      requestAnimationFrame(() => {
+        atBottom.current = false;
+        document.getElementById(`msg-${id}`)?.scrollIntoView({ block: "center" });
+      });
       const t = setTimeout(() => setHighlight(null), 3000);
       return () => clearTimeout(t);
     }
@@ -200,30 +213,31 @@ function Conversation({ sessionId, focus }: { sessionId: string; focus: ChatFocu
     return undefined;
   }, [focus, focusKey, messages, pages, sessionId]);
 
+  const deliverOne = useMemo(
+    () =>
+      sendQueue<ChatMessage>(
+        async () => (await messagesPage(slug, sessionId, null)).messages,
+        async (content) => ({
+          id: (await sendMessage(slug, sessionId, content)).message_id,
+          chat_session_id: sessionId,
+          role: "user",
+          content,
+          task_id: null,
+          created_at: new Date().toISOString(),
+        }),
+        (m) => m.role === "user",
+      ),
+    [slug, sessionId],
+  );
+
   const deliver = async (msg: LocalMessage) => {
     setLocal((l) => l.map((m) => (m.key === msg.key ? { ...m, state: "sending" } : m)));
     try {
-      if (msg.state === "failed") {
-        // The first attempt may have landed and only the answer got lost.
-        const newest = await messagesPage(slug, sessionId, null);
-        const first = landed(newest.messages, msg.content, msg.attempt, (m) => m.role === "user");
-        if (first) {
-          mergeMessage(qc, slug, sessionId, first);
-          setLocal((l) => l.filter((m) => m.key !== msg.key));
-          return;
-        }
-      }
-      const { message_id } = await sendMessage(slug, sessionId, msg.content);
-      mergeMessage(qc, slug, sessionId, {
-        id: message_id,
-        chat_session_id: sessionId,
-        role: "user",
-        content: msg.content,
-        task_id: null,
-        created_at: new Date().toISOString(),
-      });
+      // A retry: the first attempt may have landed and only the answer got lost.
+      const { item, earlier } = await deliverOne(msg.content, msg.attempt, msg.state === "failed");
+      mergeMessage(qc, slug, sessionId, item);
       setLocal((l) => l.filter((m) => m.key !== msg.key));
-      void qc.invalidateQueries({ queryKey: keys.pending(slug, sessionId) });
+      if (!earlier) void qc.invalidateQueries({ queryKey: keys.pending(slug, sessionId) });
     } catch {
       setLocal((l) => l.map((m) => (m.key === msg.key ? { ...m, state: "failed" } : m)));
     }
@@ -254,26 +268,28 @@ function Conversation({ sessionId, focus }: { sessionId: string; focus: ChatFocu
         </p>
       )}
       <div className="messages" ref={list} onScroll={onScroll} data-testid="messages">
-        {pages.isFetchingNextPage && <p className="muted center">加载更早的消息…</p>}
-        {pages.isError && <p className="error">消息没加载出来</p>}
-        {messages.map((m) => (
-          <div key={m.id} id={`msg-${m.id}`} data-message-id={m.id} className={`msg ${m.role}${highlight === m.id ? " highlight" : ""}`}>
-            <MessageBody message={m} />
-            {queuedIds.has(m.id) && <span className="muted queued">等上一条回复完再处理</span>}
-            {(cardsByMessage.get(m.id) ?? []).map((c) => <PlanCardView key={c.id} card={c} sessionId={sessionId} />)}
-          </div>
-        ))}
-        {local.map((m) => (
-          <div key={m.key} className={`msg user local ${m.state}`}>
-            <p className="plain">{m.content}</p>
-            {m.state === "sending" ? (
-              <span className="muted">发送中…</span>
-            ) : (
-              <button type="button" className="link-button error" onClick={() => void deliver(m)}>没发出去，点一下重发</button>
-            )}
-          </div>
-        ))}
-        {replying && <p className="muted typing">super-agent 正在回复…</p>}
+        <div ref={body}>
+          {pages.isFetchingNextPage && <p className="muted center">加载更早的消息…</p>}
+          {pages.isError && <p className="error">消息没加载出来</p>}
+          {messages.map((m) => (
+            <div key={m.id} id={`msg-${m.id}`} data-message-id={m.id} className={`msg ${m.role}${highlight === m.id ? " highlight" : ""}`}>
+              <MessageBody message={m} />
+              {queuedIds.has(m.id) && <span className="muted queued">等上一条回复完再处理</span>}
+              {(cardsByMessage.get(m.id) ?? []).map((c) => <PlanCardView key={c.id} card={c} sessionId={sessionId} />)}
+            </div>
+          ))}
+          {local.map((m) => (
+            <div key={m.key} className={`msg user local ${m.state}`}>
+              <p className="plain">{m.content}</p>
+              {m.state === "sending" ? (
+                <span className="muted">发送中…</span>
+              ) : (
+                <button type="button" className="link-button error" onClick={() => void deliver(m)}>没发出去，点一下重发</button>
+              )}
+            </div>
+          ))}
+          {replying && <p className="muted typing">super-agent 正在回复…</p>}
+        </div>
       </div>
       {unseen > 0 && (
         <button
@@ -297,6 +313,23 @@ function Conversation({ sessionId, focus }: { sessionId: string; focus: ChatFocu
       />
     </aside>
   );
+}
+
+/**
+ * Keeps `list` at its bottom while `body` changes height and `pinned()`
+ * holds, new message or not (BUNN-31 Fail 1). Scrolled up, nothing moves.
+ */
+export function followGrowth(
+  list: { scrollTop: number; scrollHeight: number },
+  body: Element,
+  pinned: () => boolean,
+  Observer: typeof ResizeObserver = ResizeObserver,
+): () => void {
+  const ro = new Observer(() => {
+    if (pinned()) list.scrollTop = list.scrollHeight;
+  });
+  ro.observe(body);
+  return () => ro.disconnect();
 }
 
 /**

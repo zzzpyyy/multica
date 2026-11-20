@@ -44,22 +44,22 @@ describe("a resend recognizes its first try (Chat.tsx, Comments.tsx)", () => {
       ({ id, chat_session_id: "s", role, content: "你好", task_id: null, created_at });
     const user = (x: ChatMessage) => x.role === "user";
     // "2026-11-20T17:00:00+08:00" >= "2026-11-20T11:59:55.000Z" as strings: the old check took it.
-    expect(landed([m("old", LOCAL("17:00:00"))], "你好 ", attempt(), user)).toBeUndefined();
+    expect(landed([m("old", LOCAL("17:00:00"))], "你好 ", attempt(), user, new Set())).toBeUndefined();
     // The try that did land, in either spelling.
-    expect(landed([m("old", LOCAL("17:00:00")), m("new", LOCAL("20:00:01"))], "你好", attempt(), user)?.id).toBe("new");
-    expect(landed([m("new", UTC("12:00:01"))], "你好", attempt(), user)?.id).toBe("new");
+    expect(landed([m("old", LOCAL("17:00:00")), m("new", LOCAL("20:00:01"))], "你好", attempt(), user, new Set())?.id).toBe("new");
+    expect(landed([m("new", UTC("12:00:01"))], "你好", attempt(), user, new Set())?.id).toBe("new");
     // Not the super-agent's message, not one that was on screen before the try.
-    expect(landed([m("reply", LOCAL("20:00:02"), "assistant")], "你好", attempt(), user)).toBeUndefined();
-    expect(landed([m("shown", LOCAL("20:00:01"))], "你好", attempt(["shown"]), user)).toBeUndefined();
+    expect(landed([m("reply", LOCAL("20:00:02"), "assistant")], "你好", attempt(), user, new Set())).toBeUndefined();
+    expect(landed([m("shown", LOCAL("20:00:01"))], "你好", attempt(["shown"]), user, new Set())).toBeUndefined();
   });
 
   it("comments: the same text in the same box 3 hours earlier is not this try", () => {
     const c = (id: string, created_at: string, extra: Partial<Comment> = {}) =>
       ({ id, author_id: "u-me", parent_id: null, content: "收到", created_at, ...extra }) as Comment;
     const mine = (x: Comment) => x.author_id === "u-me" && x.parent_id === null;
-    expect(landed([c("old", LOCAL("17:00:00"))], "收到", attempt(), mine)).toBeUndefined();
-    expect(landed([c("old", LOCAL("17:00:00")), c("new", LOCAL("20:00:01"))], "收到", attempt(), mine)?.id).toBe("new");
-    expect(landed([c("other", LOCAL("20:00:01"), { author_id: "u-other" })], "收到", attempt(), mine)).toBeUndefined();
-    expect(landed([c("reply", LOCAL("20:00:01"), { parent_id: "root" })], "收到", attempt(), mine)).toBeUndefined();
+    expect(landed([c("old", LOCAL("17:00:00"))], "收到", attempt(), mine, new Set())).toBeUndefined();
+    expect(landed([c("old", LOCAL("17:00:00")), c("new", LOCAL("20:00:01"))], "收到", attempt(), mine, new Set())?.id).toBe("new");
+    expect(landed([c("other", LOCAL("20:00:01"), { author_id: "u-other" })], "收到", attempt(), mine, new Set())).toBeUndefined();
+    expect(landed([c("reply", LOCAL("20:00:01"), { parent_id: "root" })], "收到", attempt(), mine, new Set())).toBeUndefined();
   });
 });

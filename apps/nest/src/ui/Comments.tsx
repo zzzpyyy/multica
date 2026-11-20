@@ -67,9 +67,14 @@ export function Comments({ issueId, focusCommentId }: { issueId: string; focusCo
   }, [focusCommentId, data, all, issueId]);
 
   // Per box: its first attempt, so a retry can tell whether that attempt
-  // actually landed (the comment endpoint has no idempotency key).
+  // actually landed (the comment endpoint has no idempotency key). A comment
+  // a send here already ended with is no one else's first attempt (Fail 2).
   const firstTry = useRef(new Map<string, Attempt>());
-  useEffect(() => firstTry.current.clear(), [issueId]);
+  const claimed = useRef(new Set<string>());
+  useEffect(() => {
+    firstTry.current.clear();
+    claimed.current.clear();
+  }, [issueId]);
 
   const send = (parentId: string | null) => async (text: string): Promise<SendResult> => {
     const box = parentId ?? "root";
@@ -77,7 +82,9 @@ export function Comments({ issueId, focusCommentId }: { issueId: string; focusCo
       const attempt = firstTry.current.get(box);
       if (attempt) {
         const fresh = await listComments(slug, issueId);
-        if (landed(fresh.comments, text, attempt, (c) => c.author_id === userId && c.parent_id === parentId)) {
+        const first = landed(fresh.comments, text, attempt, (c) => c.author_id === userId && c.parent_id === parentId, claimed.current);
+        if (first) {
+          claimed.current.add(first.id);
           qc.setQueryData(keys.comments(slug, issueId), fresh);
           firstTry.current.delete(box);
           if (parentId) setReplyTo(null);
@@ -87,6 +94,7 @@ export function Comments({ issueId, focusCommentId }: { issueId: string; focusCo
         firstTry.current.set(box, { since: Date.now() - 5000, known: new Set((data?.comments ?? []).map((c) => c.id)) });
       }
       const created = await createComment(slug, issueId, text, parentId);
+      claimed.current.add(created.id);
       firstTry.current.delete(box);
       qc.setQueryData<{ comments: Comment[]; truncated: boolean }>(keys.comments(slug, issueId), (old) =>
         old && !old.comments.some((c) => c.id === created.id) ? { ...old, comments: [...old.comments, created] } : old,

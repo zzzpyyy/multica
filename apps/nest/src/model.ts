@@ -69,16 +69,54 @@ export interface Attempt {
   known: ReadonlySet<string>;
 }
 
-/** The first try of a resend that landed after all: mine, same text, written after it left, not on screen before it. */
+/**
+ * The first try of a resend that landed after all: mine, same text, written
+ * after it left, not on screen before it, and not what another send on this
+ * page already ended with (`claimed`, BUNN-31 Fail 2).
+ */
 export function landed<T extends { id: string; created_at: string; content: string }>(
   items: readonly T[],
   text: string,
   attempt: Attempt,
   mine: (item: T) => boolean,
+  claimed: ReadonlySet<string>,
 ): T | undefined {
   return items.find(
-    (x) => mine(x) && x.content.trim() === text.trim() && !attempt.known.has(x.id) && timeOf(x.created_at) >= attempt.since,
+    (x) =>
+      mine(x) && !claimed.has(x.id) && x.content.trim() === text.trim() && !attempt.known.has(x.id) && timeOf(x.created_at) >= attempt.since,
   );
+}
+
+/**
+ * Chat sends (BUNN-31 Fail 2). A retry first looks for its earlier try among
+ * the newest messages; each send ends with its own server message, and no
+ * two sends end with the same one. Side by side, a retry took the same-text
+ * message another send was still waiting on, and its own text was never
+ * sent. Sends of the same text go one after another, so a retry looks only
+ * once the send before it knows its message; other texts never match, so
+ * they don't wait.
+ */
+// ponytail: a hung send holds the next send of the same text; give sendMessage a timeout if that shows up.
+export function sendQueue<T extends { id: string; created_at: string; content: string }>(
+  newest: () => Promise<readonly T[]>,
+  post: (text: string) => Promise<T>,
+  mine: (item: T) => boolean,
+) {
+  const claimed = new Set<string>();
+  const tails = new Map<string, Promise<unknown>>();
+  return (text: string, attempt: Attempt, retry: boolean): Promise<{ item: T; earlier: boolean }> => {
+    const key = text.trim();
+    const run = (tails.get(key) ?? Promise.resolve()).then(async () => {
+      const found = retry ? landed(await newest(), text, attempt, mine, claimed) : undefined;
+      const item = found ?? (await post(text));
+      claimed.add(item.id);
+      return { item, earlier: !!found };
+    });
+    const tail = run.catch(() => undefined);
+    tails.set(key, tail);
+    void tail.then(() => tails.get(key) === tail && tails.delete(key));
+    return run;
+  };
 }
 
 // ── Tree ────────────────────────────────────────────────────────────────
