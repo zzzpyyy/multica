@@ -302,3 +302,46 @@ func TestPlanCardJSONShape(t *testing.T) {
 		t.Errorf("add_instances card carries created_issues: %s", b)
 	}
 }
+
+// Fork (BUNN-31 观察 5): the directory, the not-found note and the planner
+// only know targets the session's member may assign work to; a squad goes
+// with its leader.
+func TestSuperDirectoryOnlyAssignable(t *testing.T) {
+	f := newSuperFixture(t)
+	hidden := f.fx.Agent(t, "XA", f.runtimeID)
+	f.fx.Squad(t, "XQ", hidden)
+	var asked []string
+	f.svc.SuperCanAssign = func(_ context.Context, a db.Agent, member, _ string) bool {
+		asked = append(asked, member)
+		return a.Name != "XA"
+	}
+	f.turn("给 XA 建个任务：整理周报，完成标准是周报发出")
+
+	session, err := f.svc.Queries.GetChatSession(context.Background(), util.MustParseUUID(f.session))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := f.svc.SuperDirectoryText(context.Background(), session)
+	if strings.Contains(text, "XA") || strings.Contains(text, "XQ") || !strings.Contains(text, "智能体「尤雨溪」：前端") {
+		t.Fatalf("directory:\n%s", text)
+	}
+	for _, m := range asked {
+		if m != f.userID {
+			t.Fatalf("judged for %s, want the session creator %s", m, f.userID)
+		}
+	}
+	for _, who := range []string{"XA", "XQ"} {
+		visible, plan := f.plan(fence(`{"type":"create_issues","issues":[{"title":"周报","assignee":"` + who + `","what":"整理周报","done":"发出"}]}`))
+		if plan != nil || !strings.Contains(visible, "找不到「"+who+"」") || strings.Contains(visible, "XA、") {
+			t.Fatalf("%s: plan %v, reply %q", who, plan != nil, visible)
+		}
+	}
+	x := f.issue("X")
+	var number int32
+	f.fx.QueryRow(t, `SELECT number FROM issue WHERE id=$1`, x).Scan(&number)
+	f.fx.Exec(t, `UPDATE workspace SET issue_prefix='SAT' WHERE id=$1`, f.fx.WorkspaceID)
+	ident := IssueIdentifier("SAT", number)
+	if visible, plan := f.plan(fence(`{"type":"add_instances","issue":"` + ident + `","agent":"XA","splits":["a"]}`)); plan != nil || !strings.Contains(visible, "找不到智能体「XA」") || strings.Contains(visible[strings.Index(visible, "可选"):], "XA") {
+		t.Fatalf("add_instances: plan %v, reply %q", plan != nil, visible)
+	}
+}

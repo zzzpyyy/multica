@@ -72,24 +72,7 @@ func (h *Handler) superAgentContext(ctx context.Context, task *db.AgentTaskQueue
 	b.WriteString(superAgentDataOpen + "\n")
 
 	b.WriteString("## 工作区目录（负责人只能从这里选）\n")
-	if squads, err := h.Queries.ListSquads(ctx, ws.ID); err == nil {
-		for _, s := range squads {
-			fmt.Fprintf(&b, "- 小队「%s」：%s\n", s.Name, oneLine(s.Description, 120))
-		}
-	}
-	if agents, err := h.Queries.ListAgents(ctx, ws.ID); err == nil {
-		for _, a := range agents {
-			if service.IsSuperAgent(a) {
-				continue
-			}
-			fmt.Fprintf(&b, "- 智能体「%s」：%s\n", a.Name, oneLine(a.Description, 120))
-		}
-	}
-	if members, err := h.Queries.ListMembersWithUser(ctx, ws.ID); err == nil {
-		for _, m := range members {
-			fmt.Fprintf(&b, "- 成员「%s」\n", m.UserName)
-		}
-	}
+	b.WriteString(h.TaskService.SuperDirectoryText(ctx, session))
 
 	if cards, err := h.Queries.ListPendingSuperAgentActions(ctx, session.ID); err == nil && len(cards) > 0 {
 		b.WriteString("\n## 待用户确认的计划卡片\n")

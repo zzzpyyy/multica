@@ -224,26 +224,44 @@ func fitSentences(s string, max int) (string, bool) {
 }
 
 // superDirectory is the workspace directory assignees are matched against
-// (exact name; the super-agent itself excluded).
+// (exact name; the super-agent itself excluded). The turn context lists the
+// same entries (SuperDirectoryText), so the model is never offered a target
+// the planner would refuse.
 type superDirectory struct {
 	squads, agents, members []SuperAssignee
 	agentRows               map[string]db.Agent
+	about                   map[string]string // squad/agent id -> description
 }
 
-func (s *TaskService) loadSuperDirectory(ctx context.Context, q *db.Queries, ws pgtype.UUID) superDirectory {
-	d := superDirectory{agentRows: map[string]db.Agent{}}
+// loadSuperDirectory lists only the agents and squads the session's member
+// may assign work to (BUNN-31 观察 5): SuperCanAssign is the issue create
+// path's canInvokeAgent, and a squad is judged by its leader as there.
+func (s *TaskService) loadSuperDirectory(ctx context.Context, q *db.Queries, session db.ChatSession) superDirectory {
+	ws, member := session.WorkspaceID, util.UUIDToString(session.CreatorID)
+	assignable := func(a db.Agent) bool {
+		return !a.ArchivedAt.Valid && !IsSuperAgent(a) &&
+			(s.SuperCanAssign == nil || s.SuperCanAssign(ctx, a, member, util.UUIDToString(ws)))
+	}
+	d := superDirectory{agentRows: map[string]db.Agent{}, about: map[string]string{}}
 	if rows, err := q.ListSquads(ctx, ws); err == nil {
 		for _, r := range rows {
-			d.squads = append(d.squads, SuperAssignee{Type: "squad", ID: util.UUIDToString(r.ID), Name: r.Name})
+			if leader, err := q.GetAgent(ctx, r.LeaderID); err != nil || !assignable(leader) {
+				continue
+			}
+			id := util.UUIDToString(r.ID)
+			d.squads = append(d.squads, SuperAssignee{Type: "squad", ID: id, Name: r.Name})
+			d.about[id] = r.Description
 		}
 	}
 	if rows, err := q.ListAgents(ctx, ws); err == nil {
 		for _, r := range rows {
-			if IsSuperAgent(r) {
+			if !assignable(r) {
 				continue
 			}
-			d.agents = append(d.agents, SuperAssignee{Type: "agent", ID: util.UUIDToString(r.ID), Name: r.Name})
-			d.agentRows[util.UUIDToString(r.ID)] = r
+			id := util.UUIDToString(r.ID)
+			d.agents = append(d.agents, SuperAssignee{Type: "agent", ID: id, Name: r.Name})
+			d.agentRows[id] = r
+			d.about[id] = r.Description
 		}
 	}
 	if rows, err := q.ListMembersWithUser(ctx, ws); err == nil {
@@ -252,6 +270,22 @@ func (s *TaskService) loadSuperDirectory(ctx context.Context, q *db.Queries, ws 
 		}
 	}
 	return d
+}
+
+// SuperDirectoryText renders the directory for the turn context.
+func (s *TaskService) SuperDirectoryText(ctx context.Context, session db.ChatSession) string {
+	d := s.loadSuperDirectory(ctx, s.Queries, session)
+	var b strings.Builder
+	for _, x := range d.squads {
+		fmt.Fprintf(&b, "- 小队「%s」：%s\n", x.Name, oneLineRunes(d.about[x.ID], 120))
+	}
+	for _, x := range d.agents {
+		fmt.Fprintf(&b, "- 智能体「%s」：%s\n", x.Name, oneLineRunes(d.about[x.ID], 120))
+	}
+	for _, x := range d.members {
+		fmt.Fprintf(&b, "- 成员「%s」\n", x.Name)
+	}
+	return b.String()
 }
 
 func (d superDirectory) find(name string, kinds ...string) (SuperAssignee, bool) {
@@ -284,7 +318,7 @@ func (d superDirectory) notFound(missing []string) string {
 }
 
 func (s *TaskService) planCreateIssues(ctx context.Context, q *db.Queries, turn superTurn, visible string, act superAction) (string, *superPlan) {
-	dir := s.loadSuperDirectory(ctx, q, turn.session.WorkspaceID)
+	dir := s.loadSuperDirectory(ctx, q, turn.session)
 	if len(act.Issues) == 0 {
 		return capReply(visible, superReplyMaxRunes), nil
 	}
@@ -355,7 +389,7 @@ func (s *TaskService) planAddInstances(ctx context.Context, q *db.Queries, turn 
 	if !ok {
 		return refuse(fmt.Sprintf("找不到任务「%s」。", strings.TrimSpace(act.Issue)))
 	}
-	dir := s.loadSuperDirectory(ctx, q, turn.session.WorkspaceID)
+	dir := s.loadSuperDirectory(ctx, q, turn.session)
 	who, ok := dir.find(act.Agent, "agent")
 	if !ok {
 		return refuse(fmt.Sprintf("找不到智能体「%s」。可选：%s。", strings.TrimSpace(act.Agent), names(dir.agents)))

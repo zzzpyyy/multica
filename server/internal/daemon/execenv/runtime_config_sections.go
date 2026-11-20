@@ -556,8 +556,19 @@ func writeWorkflowHeader(b *strings.Builder) {
 // Room shape is run context rather than an agent/provider invariant, so it is
 // emitted by daemon.BuildPrompt instead of fragmenting this cached brief across
 // group, direct, and unknown-audience chat sessions (MUL-5377, MUL-5442).
-func writeWorkflowChat(b *strings.Builder) {
+//
+// Fork (B, BUNN-31 问题 5): a no_tools chat (the super-agent) gets a workflow
+// that says so. The CLI lines below made a model resuming a long session on a
+// different model go look for `multica`, find no tools, and end the turn with
+// no text. Changing this text keeps the session: Claude Code re-reads the
+// changed CLAUDE.md on resume.
+func writeWorkflowChat(b *strings.Builder, noTools bool) {
 	b.WriteString("**You are in chat mode.**\n\n")
+	if noTools {
+		b.WriteString("- You have no tools in this chat: no `multica` CLI, no shell, no files. Reply to the user's message with text only, as Agent Identity says; the server carries out any action block after the user confirms.\n")
+		b.WriteString("- Keep responses concise and direct\n\n")
+		return
+	}
 	b.WriteString("- Respond conversationally and helpfully to the user's message\n")
 	b.WriteString("- You have full access to the `multica` CLI to look up issues, workspace info, members, agents, etc.\n")
 	b.WriteString("- If asked about issues, use `multica issue list --output json` or `multica issue get <id> --output json`\n")
@@ -982,7 +993,7 @@ func buildMetaSkillContentSlim(provider string, ctx TaskContextForEnv) string {
 	writeWorkflowHeader(&b)
 	switch kind {
 	case kindChat:
-		writeWorkflowChat(&b)
+		writeWorkflowChat(&b, ctx.NoTools)
 	case kindQuickCreate:
 		writeWorkflowQuickCreate(&b)
 	case kindAutopilotRunOnly:

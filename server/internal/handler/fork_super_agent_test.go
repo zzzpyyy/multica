@@ -185,3 +185,35 @@ func TestSuperAgentClaimHasNoTools(t *testing.T) {
 		t.Fatalf("turn input lacks the message id: failure=%+v msg=%q", failure, resp.ChatMessage)
 	}
 }
+
+// Fork (BUNN-31 观察 5): the turn's directory lists only what the session's
+// member may assign work to, judged by the issue create path's check
+// (canInvokeAgent); a squad goes with its leader.
+func TestSuperAgentDirectoryOnlyAssignable(t *testing.T) {
+	fx, rt, sa := superAgentFixture(t)
+	other := fx.User(t, "dir-other", "dir-other-"+sa.ID[:8]+"@example.com")
+	mine := fx.Agent(t, "DA-mine", testRuntimeID)
+	theirs := fx.Agent(t, "DA-theirs", testRuntimeID, testutil.Cols{"owner_id": other})
+	shared := fx.Agent(t, "DA-shared", testRuntimeID, testutil.Cols{"owner_id": other, "permission_mode": "public_to"})
+	fx.InsertNoID(t, "agent_invocation_target", testutil.Cols{"agent_id": shared, "target_type": "workspace", "target_id": testWorkspaceID}, `agent_id=$1`, shared)
+	fx.Squad(t, "DQ-theirs", theirs)
+	fx.Squad(t, "DQ-mine", mine)
+
+	turn := newSuperTurn(t, fx, sa, rt, "给 DA-theirs 建个任务")
+	task, err := testHandler.Queries.GetAgentTask(context.Background(), parseUUID(turn.task))
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, err := testHandler.superAgentContext(context.Background(), &task)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]bool{"DA-mine": true, "DA-shared": true, "DQ-mine": true, "DA-theirs": false, "DQ-theirs": false} {
+		if strings.Contains(block, "「"+name+"」") != want {
+			t.Errorf("%s listed = %v, want %v", name, !want, want)
+		}
+	}
+	if t.Failed() {
+		t.Log(block)
+	}
+}

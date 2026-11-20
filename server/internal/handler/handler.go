@@ -546,6 +546,10 @@ func New(queries *db.Queries, txStarter txStarter, hub *realtime.Hub, bus *event
 		LLM: llmClient,
 		cfg: cfg,
 	}
+	// Fork (B): the super-agent's directory uses the issue create path's check.
+	taskSvc.SuperCanAssign = func(ctx context.Context, a db.Agent, memberID, workspaceID string) bool {
+		return h.canInvokeAgent(ctx, a, "member", memberID, memberID, workspaceID)
+	}
 	h.WebhookDeliveryWorker = NewWebhookDeliveryWorker(h)
 	// The default passthrough scheduler reports sweeper-race recoveries so the
 	// daemon:register refresh fires even without the production batched wiring.

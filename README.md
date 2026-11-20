@@ -193,6 +193,8 @@ issue — so nobody reconstructs context, and nothing ships without a human sayi
 | `server/internal/handler/daemon.go`（super-agent） | 领取 super-agent 的任务要求 `multica-fork-v1`；清空工具相关字段、设 `no_tools`、用内置说明，对话轮次前面拼上服务端上下文，代答轮次给 `server_prompt`；`CompleteTask` 提交后执行转达、改状态和代答结果 | B1、B12、B19、G3、R1、R4–R6、R11 |
 | `server/internal/service/task.go`（super-agent） | 触发器拒绝的入队当作"没有入队"；委派失败不交给 super-agent 接手；super-agent 的运行不补兜底评论；对话回复写入前剥掉 `super-action` 围栏，校验后和回复在同一个事务里写进 `super_agent_action` | B2–B11、B15–B18、D13、D16、G4、G5 |
 | `server/internal/daemon/daemon.go`、`prompt.go`、`types.go`（super-agent） | `no_tools` 的任务不合并本机 `~/.claude.json`、Remote MCP 和插件钩子，丢掉 `custom_args`，加 `--tools ""`；`server_prompt` 不为空时直接作为提示词 | B12、G3 |
+| `server/internal/daemon/execenv/execenv.go`、`runtime_config_sections.go`、`server/internal/daemon/daemon.go`（`NoTools`） | `no_tools` 的对话简报不写“可以用 `multica` CLI”，改成“没有工具，只回文字”；其他对话简报不变 | B3、B14 |
+| `server/internal/service/task.go`、`server/internal/handler/handler.go`（`SuperCanAssign`） | super-agent 的工作区目录只列会话成员能派活的智能体和小队（小队按 leader 算），判断就是建任务时的 `canInvokeAgent` | B2、B10 |
 | `server/cmd/server/notification_listeners.go` | 智能体 @ 了开通 super-agent 的成员时，这条评论不进该成员的收件箱（`mentioned` 和订阅者的 `new_comment` 都不发），转给 super-agent 代答 | F3、R2 |
 | `server/cmd/server/main.go`（super-agent） | 注册推送和代答的监听、代答问题的 30 秒兜底扫描 | F1–F9、R2、R3、R7–R9、R12、G5 |
 | `server/internal/handler/agent.go`、`daemon.go` | 领取响应加 `instance` 字段；没声明 `multica-fork-v1` 的 daemon 领到实例行时，这次领取失败（`fork_daemon_required`） | D2、D3 |

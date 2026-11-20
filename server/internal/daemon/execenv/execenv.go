@@ -164,6 +164,9 @@ type TaskContextForEnv struct {
 	ProjectDescription            string                  // durable project-level context, rendered into the brief's Project Context section
 	ProjectResources              []ProjectResourceForEnv // resources attached to the project
 	ChatSessionID                 string                  // non-empty for chat tasks
+	// Fork (B): a no_tools task (the super-agent) launches with no tools, so its
+	// chat brief must not promise the multica CLI (BUNN-31 问题 5).
+	NoTools bool
 	// ChatChannelType is the IM platform behind a chat session ("slack",
 	// "feishu", "wecom"); empty for a web/mobile chat. It names the surface in
 	// the brief's copy; what that surface can DELIVER is the separate field

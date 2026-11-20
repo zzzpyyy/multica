@@ -87,6 +87,10 @@ type TaskService struct {
 	// state for a self-hosted deployment with no MULTICA_LLM_* configuration.
 	// Wired in router.go from the same *llm.Client that backs chat auto-titling.
 	QuickActions ChatQuickActionsLLM
+	// Fork (B, BUNN-31 观察 5): may this member assign work to this agent? The
+	// handler wires it to canInvokeAgent, the issue create path's check; nil
+	// (service-only tests) lists every agent.
+	SuperCanAssign func(ctx context.Context, agent db.Agent, memberID, workspaceID string) bool
 	// quickActionsInFlight (chat session id -> struct{}{}) and
 	// quickActionsRunning admit suggestion passes: one per session, and a
 	// process-wide ceiling. Both zero values are usable, so a TaskService built
