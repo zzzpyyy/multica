@@ -49,6 +49,38 @@ const isCancelled = (issue: Issue, cat: Catalog) => {
   return c === "cancelled" || c === "closed";
 };
 
+// ── Time ────────────────────────────────────────────────────────────────
+
+/**
+ * RFC 3339 times by value, never as strings: the API writes "+08:00" and
+ * chat:done writes "Z", both valid (BUNN-31 问题 3). Milliseconds only; ties
+ * fall back to the caller's next key. Unreadable times count as 0.
+ */
+export function timeOf(iso: string): number {
+  const t = Date.parse(iso);
+  return Number.isNaN(t) ? 0 : t;
+}
+export const compareTime = (a: string, b: string) => timeOf(a) - timeOf(b);
+
+/** A send whose answer got lost: when it left, and what was already on screen then. */
+export interface Attempt {
+  /** Milliseconds; a few seconds early, for the browser's clock running ahead. */
+  since: number;
+  known: ReadonlySet<string>;
+}
+
+/** The first try of a resend that landed after all: mine, same text, written after it left, not on screen before it. */
+export function landed<T extends { id: string; created_at: string; content: string }>(
+  items: readonly T[],
+  text: string,
+  attempt: Attempt,
+  mine: (item: T) => boolean,
+): T | undefined {
+  return items.find(
+    (x) => mine(x) && x.content.trim() === text.trim() && !attempt.known.has(x.id) && timeOf(x.created_at) >= attempt.since,
+  );
+}
+
 // ── Tree ────────────────────────────────────────────────────────────────
 
 export interface Tree {
@@ -300,7 +332,7 @@ export function indexRuns(snapshot: readonly SnapshotTask[]): RunIndex {
     tallies.set(t.issue_id, perAgent);
   }
   const startOf = (t: SnapshotTask) => t.started_at ?? t.created_at;
-  for (const list of running.values()) list.sort((a, b) => startOf(a).localeCompare(startOf(b)));
+  for (const list of running.values()) list.sort((a, b) => compareTime(startOf(a), startOf(b)));
   return { running, counts: new Map([...tallies].map(([id, m]) => [id, [...m.values()]])) };
 }
 
@@ -365,9 +397,22 @@ export function waitingOn(issue: Issue, ctx: Ctx): string | null {
   return who ? `等 ${who}` : "等其他人";
 }
 
-/** The status shown in a header or row: "待你验收" when the server says you review it. */
+/** The status in a cell's tooltip: "待你验收" when the server says you review it. */
 export const statusText = (issue: Issue, ctx: Ctx) =>
   issue.status === "in_review" && ctx.att.mine.has(issue.id) ? "待你验收" : ctx.cat.label(issue.status);
+
+/**
+ * The status written on a row and in the detail header (PRD v4 3.1.3, 3.2.2):
+ * the plain label, as the detail does since BUNN-26 ("审核中", with "等你验收"
+ * beside it). Left out when 在等谁 already says it: "待规划" twice, "已阻塞"
+ * next to "阻塞，等你处理", "审核中" with no reviewer known.
+ */
+export function shownStatus(issue: Issue, waiting: string | null, cat: Catalog): string | null {
+  const label = cat.label(issue.status);
+  if (waiting === label) return null;
+  if (issue.status === "blocked" && waiting?.startsWith("阻塞")) return null;
+  return label;
+}
 
 // ── Left column (PRD v4 3.1) ────────────────────────────────────────────
 
@@ -377,7 +422,7 @@ export interface Groups {
   done: Issue[];
 }
 
-const newestFirst = (a: Issue, b: Issue) => b.created_at.localeCompare(a.created_at) || b.number - a.number;
+const newestFirst = (a: Issue, b: Issue) => compareTime(b.created_at, a.created_at) || b.number - a.number;
 
 /**
  * Three fixed groups, newest first inside each. A closed top-level issue is

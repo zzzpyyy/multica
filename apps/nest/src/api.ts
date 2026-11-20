@@ -138,6 +138,8 @@ export interface ChatMessage {
   content: string;
   chat_session_id: string;
   task_id: string | null;
+  /** "no_response": the turn ended without text; content is an English fallback. */
+  message_kind?: string;
 }
 
 export interface MessagesCursor {
@@ -383,6 +385,9 @@ export const listInstances = async (slug: string, issueId: string) =>
   (await get<{ batches: InstanceBatch[] }>(`/api/issues/${issueId}/instances`, slug)).batches ?? [];
 
 /** Mark done. A stale revision gets 409 instead of overwriting a newer status. */
+/** One issue of this workspace; 404 when there is none here (another workspace's too). */
+export const getIssue = (slug: string, id: string) => get<Issue>(`/api/issues/${encodeURIComponent(id)}`, slug);
+
 export const approve = (slug: string, issue: Issue) =>
   request<Issue>(`/api/issues/${issue.id}`, {
     method: "PUT",

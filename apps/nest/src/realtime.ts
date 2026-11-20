@@ -35,7 +35,7 @@ const TASK_EVENTS = new Set([
 
 type CommentsData = { comments: Comment[]; truncated: boolean };
 
-function mergeIssue(qc: QueryClient, slug: string, issue: Issue): void {
+export function mergeIssue(qc: QueryClient, slug: string, issue: Issue): void {
   qc.setQueryData<Issue[]>(keys.issues(slug), (old) => {
     if (!old) return old;
     const i = old.findIndex((x) => x.id === issue.id);
@@ -129,6 +129,7 @@ export function applyEvent(qc: QueryClient, ctx: EventContext, event: WsEvent): 
         content: p.content,
         task_id: typeof p.task_id === "string" && p.task_id !== "" ? p.task_id : null,
         created_at: typeof p.created_at === "string" ? p.created_at : new Date().toISOString(),
+        ...(typeof p.message_kind === "string" ? { message_kind: p.message_kind } : {}),
       });
     }
     invalidate(keys.pending(slug, ctx.sessionId));

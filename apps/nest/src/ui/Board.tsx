@@ -13,8 +13,8 @@ import {
   needsYou,
   oneLine,
   runCounts,
+  shownStatus,
   stageRows,
-  statusText,
   stripTitle,
   tone,
   visibleIssues,
@@ -31,6 +31,8 @@ interface Shared {
   commentId: string | null;
   /** Shown issues while a filter is on; null shows everything. */
   visible: Set<string> | null;
+  /** The selected issue and its ancestors: what holds them stays open. */
+  path: string[];
   isOpen: (issue: Issue, depth: number) => boolean;
   toggle: (issue: Issue, depth: number) => void;
 }
@@ -66,6 +68,7 @@ export function Board({ current, commentId, filter }: { current: Issue | null; c
     current,
     commentId,
     visible,
+    path,
     isOpen: (issue, depth) => visible !== null || (manual.get(issue.id) ?? (depth > 0 || path.includes(issue.id))),
     toggle: (issue, depth) => setManual((m) => new Map(m).set(issue.id, !shared.isOpen(issue, depth))),
   };
@@ -138,6 +141,7 @@ function Row({ issue, depth, stage, parent, shared, kids, open }: NodeProps & { 
   }, [selected]);
   const href = issuePath(ws.slug, issue.id);
   const waiting = waitingOn(issue, ws);
+  const status = shownStatus(issue, waiting, ws.cat);
   const parts = kids.length > 0 ? oneLine(issue, kids, ws.att, ws.cat) : [];
   const runs = runCounts(ws.runs, issue.id, ws.names).map((c) => <span key={c} className="runs"><Dotted text={c} /></span>);
   const data = depth === 0 ? { "data-entry": issue.identifier } : { "data-child": issue.identifier };
@@ -150,11 +154,13 @@ function Row({ issue, depth, stage, parent, shared, kids, open }: NodeProps & { 
       ) : (
         <span className="twisty" />
       )}
-      <span className={`dot ${tone(issue, ws.att, ws.cat)}`} role="img" aria-label={statusText(issue, ws)} title={statusText(issue, ws)} />
+      {/* The color is a cue only; the status is written out (PRD v4 3.1.3, 3.2.2). */}
+      <span className={`dot ${tone(issue, ws.att, ws.cat)}`} aria-hidden />
       <a href={href} className="open" aria-current={selected ? "true" : undefined} onClick={(e) => { e.preventDefault(); go(href); }}>
         <span className="ident">{issue.identifier}</span>
         <span className="title">{parent ? stripTitle(issue.title, parent.identifier) : issue.title}</span>
       </a>
+      <span className="state" title={status ?? undefined}>{status}</span>
       <Who issue={issue} />
     </>
   );
@@ -209,7 +215,8 @@ function Children({ parent, depth, shared }: { parent: Issue; depth: number; sha
       {stageRows(kids, ws.cat).flatMap((row) => {
         if (row.kind === "group") return row.issues.map((c) => node(c, row.stage));
         const id = `f${row.from}`;
-        const open = !!shared.visible || unfolded.has(id);
+        // Like 已完成: the stage holding the selected issue stays open (BUNN-31 问题 2).
+        const open = !!shared.visible || unfolded.has(id) || row.groups.some((g) => g.issues.some((c) => shared.path.includes(c.id)));
         return [
           <button
             key={id}
@@ -236,7 +243,7 @@ function Who({ issue }: { issue: Issue }) {
       {name && (
         <>
           <span className="avatar" aria-hidden>{Array.from(name)[0]}</span>
-          <span className="who-name">{name}</span>
+          <span className="who-name" title={name}>{name}</span>
         </>
       )}
     </span>

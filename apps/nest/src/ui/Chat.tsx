@@ -3,6 +3,7 @@ import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-quer
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ApiError, ensureSuperAgent, messagesPage, sendMessage, type ChatMessage, type PlanCard } from "../api";
 import { draftKey } from "../composer";
+import { compareTime, landed, type Attempt } from "../model";
 import { keys, q } from "../queries";
 import { mergeMessage } from "../realtime";
 import { Composer, type SendResult } from "./Composer";
@@ -80,13 +81,13 @@ interface LocalMessage {
   key: string;
   content: string;
   state: "sending" | "failed";
-  /** When the first attempt left, to recognize it after a lost response. */
-  since: string;
+  /** The first attempt, to recognize it after a lost response. */
+  attempt: Attempt;
 }
 
 const AT_BOTTOM = 40;
 const MAX_PAGES = 40;
-const byTime = (a: ChatMessage, b: ChatMessage) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id);
+const byTime = (a: ChatMessage, b: ChatMessage) => compareTime(a.created_at, b.created_at) || a.id.localeCompare(b.id);
 
 function Conversation({ sessionId, focus }: { sessionId: string; focus: ChatFocus | null }) {
   const { slug, workspace } = useWorkspace();
@@ -205,9 +206,9 @@ function Conversation({ sessionId, focus }: { sessionId: string; focus: ChatFocu
       if (msg.state === "failed") {
         // The first attempt may have landed and only the answer got lost.
         const newest = await messagesPage(slug, sessionId, null);
-        const landed = newest.messages.find((m) => m.role === "user" && m.content.trim() === msg.content.trim() && m.created_at >= msg.since);
-        if (landed) {
-          mergeMessage(qc, slug, sessionId, landed);
+        const first = landed(newest.messages, msg.content, msg.attempt, (m) => m.role === "user");
+        if (first) {
+          mergeMessage(qc, slug, sessionId, first);
           setLocal((l) => l.filter((m) => m.key !== msg.key));
           return;
         }
@@ -233,7 +234,7 @@ function Conversation({ sessionId, focus }: { sessionId: string; focus: ChatFocu
       key: `local-${Date.now()}-${Math.random()}`,
       content: text,
       state: "sending",
-      since: new Date(Date.now() - 5000).toISOString(),
+      attempt: { since: Date.now() - 5000, known: new Set(messages.map((m) => m.id)) },
     };
     atBottom.current = true;
     setLocal((l) => [...l, msg]);
@@ -257,7 +258,7 @@ function Conversation({ sessionId, focus }: { sessionId: string; focus: ChatFocu
         {pages.isError && <p className="error">消息没加载出来</p>}
         {messages.map((m) => (
           <div key={m.id} id={`msg-${m.id}`} data-message-id={m.id} className={`msg ${m.role}${highlight === m.id ? " highlight" : ""}`}>
-            <Markdown text={m.content} />
+            <MessageBody message={m} />
             {queuedIds.has(m.id) && <span className="muted queued">等上一条回复完再处理</span>}
             {(cardsByMessage.get(m.id) ?? []).map((c) => <PlanCardView key={c.id} card={c} sessionId={sessionId} />)}
           </div>
@@ -296,4 +297,14 @@ function Conversation({ sessionId, focus }: { sessionId: string; focus: ChatFocu
       />
     </aside>
   );
+}
+
+/**
+ * A turn that ended without text stores an English fallback and
+ * message_kind "no_response"; the page says it in Chinese instead, as the
+ * old page does (server task.go chatNoResponseFallback).
+ */
+export function MessageBody({ message }: { message: Pick<ChatMessage, "content" | "message_kind"> }) {
+  if (message.message_kind === "no_response") return <p className="muted plain">本轮已结束，super-agent 没有返回文字回复。</p>;
+  return <Markdown text={message.content} />;
 }

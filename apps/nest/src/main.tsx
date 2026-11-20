@@ -2,7 +2,7 @@
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { StrictMode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
-import { ApiError, logout, setUnauthorizedHandler, type Me, type Workspace } from "./api";
+import { ApiError, getIssue, logout, setUnauthorizedHandler, type Issue, type Me, type Workspace } from "./api";
 import { PRODUCT_NAME } from "./config";
 import {
   buildTree,
@@ -16,7 +16,7 @@ import {
   names,
 } from "./model";
 import { keys, pageState, q } from "./queries";
-import { connect, type EventContext } from "./realtime";
+import { connect, mergeIssue, type EventContext } from "./realtime";
 import { issuePath, issuesPath, parse, replace, subscribe, type Route } from "./router";
 import { ChatPanel } from "./ui/Chat";
 import { WorkspaceContext, type WorkspaceData } from "./ui/context";
@@ -162,13 +162,33 @@ function WorkspacePage({
   if (route.kind === "issue") current = data.tree.byId.get(route.issueId) ?? null;
   else if (route.kind === "chat") current = fallback;
 
-  // /<slug>/issues picks an issue; unknown addresses and unknown issues go to /<slug>/issues (N7).
+  // /<slug>/issues picks an issue; unknown addresses go to /<slug>/issues (N7).
   useEffect(() => {
     if (!data.ready) return;
     if (route.kind === "unknown") replace(issuesPath(slug));
-    else if (route.kind === "issue" && !data.tree.byId.has(route.issueId)) replace(issuesPath(slug));
     else if (route.kind === "issues" && fallback) replace(issuePath(slug, fallback.id));
-  }, [data.ready, data.tree, route, slug, fallback]);
+  }, [data.ready, route, slug, fallback]);
+
+  // An issue the tree does not have yet (just created, its event not in):
+  // ask the server, and put it and any ancestors the tree lacks into the
+  // list. Only an issue that is not there, or not in this workspace, goes to
+  // /<slug>/issues (PRD v4 3.1.5; BUNN-31 观察 4).
+  const wanted = route.kind === "issue" ? route.issueId : null;
+  const known = !wanted || data.tree.byId.has(wanted);
+  const has = useRef(data.tree.byId);
+  has.current = data.tree.byId;
+  useEffect(() => {
+    if (!data.ready || known || !wanted) return;
+    let stale = false;
+    void missingIssues(slug, wanted, (id) => has.current.has(id)).then((found) => {
+      if (stale) return;
+      if (found === "absent") replace(issuesPath(slug));
+      else for (const issue of found) mergeIssue(qc, slug, issue);
+    });
+    return () => {
+      stale = true;
+    };
+  }, [data.ready, known, wanted, slug, qc]);
 
   const value: WorkspaceData = { ...data, current };
   const focus = route.kind === "chat" ? { sessionId: route.sessionId, messageId: route.messageId } : null;
@@ -199,6 +219,29 @@ function WorkspacePage({
       </div>
     </WorkspaceContext.Provider>
   );
+}
+
+/**
+ * The issue and the ancestors the tree lacks, child first; "absent" when the
+ * server has no such issue in this workspace (a 4xx). Any other failure finds
+ * nothing and leaves the address alone: the next refetch may bring the issue.
+ */
+async function missingIssues(slug: string, id: string, inTree: (id: string) => boolean): Promise<Issue[] | "absent"> {
+  const found: Issue[] = [];
+  for (let next: string | null = id; next && !inTree(next) && found.length < 32; ) {
+    let issue: Issue;
+    try {
+      issue = await getIssue(slug, next);
+    } catch (e) {
+      if (found.length === 0 && e instanceof ApiError && e.status >= 400 && e.status < 500) return "absent";
+      break; // a missing ancestor: the issue shows at the top level until it arrives
+    }
+    // The address names it by id; anything else (an identifier) is not this issue.
+    if (found.length === 0 && issue.id !== id) return "absent";
+    found.push(issue);
+    next = issue.parent_issue_id;
+  }
+  return found;
 }
 
 function Root() {

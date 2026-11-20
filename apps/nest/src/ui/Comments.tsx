@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ApiError, createComment, listComments, type Comment } from "../api";
 import { draftKey } from "../composer";
-import { commentInstance, type Names } from "../model";
+import { commentInstance, compareTime, landed, type Attempt, type Names } from "../model";
 import { keys, q } from "../queries";
 import { Composer, type SendResult } from "./Composer";
 import { useWorkspace } from "./context";
@@ -26,7 +26,7 @@ export function threads(comments: readonly Comment[]): Thread[] {
     return cur;
   };
   const map = new Map<string, Thread>();
-  const byTime = (a: Comment, b: Comment) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id);
+  const byTime = (a: Comment, b: Comment) => compareTime(a.created_at, b.created_at) || a.id.localeCompare(b.id);
   for (const c of [...comments].sort(byTime)) {
     const root = rootOf(c);
     const t = map.get(root.id) ?? { root, replies: [] };
@@ -35,8 +35,6 @@ export function threads(comments: readonly Comment[]): Thread[] {
   }
   return [...map.values()].sort((a, b) => byTime(a.root, b.root));
 }
-
-const sameText = (a: string, b: string) => a.trim() === b.trim();
 
 export function Comments({ issueId, focusCommentId }: { issueId: string; focusCommentId: string | null }) {
   const { slug, workspace, userId } = useWorkspace();
@@ -68,28 +66,25 @@ export function Comments({ issueId, focusCommentId }: { issueId: string; focusCo
     return () => clearTimeout(t);
   }, [focusCommentId, data, all, issueId]);
 
-  // Per box: when its first attempt left, so a retry can tell whether that
-  // attempt actually landed (the comment endpoint has no idempotency key).
-  const firstTry = useRef(new Map<string, string>());
+  // Per box: its first attempt, so a retry can tell whether that attempt
+  // actually landed (the comment endpoint has no idempotency key).
+  const firstTry = useRef(new Map<string, Attempt>());
   useEffect(() => firstTry.current.clear(), [issueId]);
 
   const send = (parentId: string | null) => async (text: string): Promise<SendResult> => {
     const box = parentId ?? "root";
     try {
-      const since = firstTry.current.get(box);
-      if (since) {
+      const attempt = firstTry.current.get(box);
+      if (attempt) {
         const fresh = await listComments(slug, issueId);
-        const landed = fresh.comments.some(
-          (c) => c.author_id === userId && c.parent_id === parentId && sameText(c.content, text) && c.created_at >= since,
-        );
-        if (landed) {
+        if (landed(fresh.comments, text, attempt, (c) => c.author_id === userId && c.parent_id === parentId)) {
           qc.setQueryData(keys.comments(slug, issueId), fresh);
           firstTry.current.delete(box);
           if (parentId) setReplyTo(null);
           return { ok: true };
         }
       } else {
-        firstTry.current.set(box, new Date(Date.now() - 5000).toISOString());
+        firstTry.current.set(box, { since: Date.now() - 5000, known: new Set((data?.comments ?? []).map((c) => c.id)) });
       }
       const created = await createComment(slug, issueId, text, parentId);
       firstTry.current.delete(box);
