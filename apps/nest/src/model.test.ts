@@ -13,13 +13,14 @@ import {
   leftGroups,
   lineText,
   names,
+  needsYou,
   oneLine,
   progress,
   runCounts,
   stageRows,
   statusText,
   stripTitle,
-  treeLevel,
+  visibleIssues,
   waitingOn,
   type Ctx,
 } from "./model";
@@ -333,15 +334,13 @@ describe("middle column (N12, N13)", () => {
     ]);
   });
 
-  it("N15: tree levels list open children by stage, closed ones last", () => {
+  it("filters: matches stay in place under their ancestors", () => {
     const list = dataset();
     const tree = buildTree(list);
-    const p1 = treeLevel(childrenOf(tree, "P1"), cat);
-    expect(p1.open.map((i) => i.id)).toEqual(["S3", "S4", "S5"]);
-    expect(p1.closed.length).toBe(2);
-    const c1 = treeLevel(childrenOf(tree, "C1"), cat);
-    expect(c1.open.map((i) => i.id)).toEqual(["G2"]);
-    expect(c1.closed.length).toBe(1);
+    const ctx = ctxOf(list);
+    const mine = visibleIssues(tree, (i) => needsYou(i, ctx.att));
+    expect([...mine].sort()).toEqual(["K14", "K15", "P1", "P5", "P6", "P9", "R3", "S3", "S4"]);
+    expect([...visibleIssues(tree, (i) => i.title.includes("接口"))].sort()).toEqual(["P1", "S3"]);
   });
 });
 

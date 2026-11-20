@@ -165,6 +165,8 @@ export interface Part {
   text: string;
   /** "待你验收" and "待你回复" stand out. */
   callToAction: boolean;
+  /** "N 个阻塞" stands out too, in the blocked color. */
+  alarm?: boolean;
 }
 
 export const SEPARATOR = " · ";
@@ -213,7 +215,7 @@ export function oneLine(issue: Issue, kids: readonly Issue[], att: AttentionInde
   }
 
   const blocked = kids.filter((k) => k.status === "blocked").length;
-  if (blocked > 0) plain(`${blocked} 个阻塞`);
+  if (blocked > 0) parts.push({ text: `${blocked} 个阻塞`, callToAction: false, alarm: true });
   const review = att.reviewBelow.get(issue.id) ?? 0;
   if (review > 0) parts.push({ text: `${review} 项待你验收`, callToAction: true });
   const reply = att.replyAtOrBelow.get(issue.id) ?? 0;
@@ -452,12 +454,31 @@ export function foldedLabel(row: Extract<StageRow, { kind: "folded" }>): string 
   return `${where} · 已完成 ${row.closed} 个${row.cancelled > 0 ? `，含 ${row.cancelled} 个已取消` : ""}`;
 }
 
-/** Tree mode, one level: open children by stage then number; closed ones folded at the end. */
-export function treeLevel(kids: readonly Issue[], cat: Catalog): { open: Issue[]; closed: Issue[] } {
-  const byStageThenNumber = (a: Issue, b: Issue) =>
-    (a.stage ?? Number.MAX_SAFE_INTEGER) - (b.stage ?? Number.MAX_SAFE_INTEGER) || a.number - b.number;
-  return {
-    open: kids.filter((k) => !isClosed(k, cat)).sort(byStageThenNumber),
-    closed: kids.filter((k) => isClosed(k, cat)).sort(byStageThenNumber),
-  };
+/** Stage order (unstaged last), then number: the segmented bar's cells. */
+export const byStage = (a: Issue, b: Issue) =>
+  (a.stage ?? Number.MAX_SAFE_INTEGER) - (b.stage ?? Number.MAX_SAFE_INTEGER) || a.number - b.number;
+
+// ── Filters (the tree's search and "只看要我处理的") ──────────────────────
+
+/** Waits on you: your review, your reply, or blocked (the "等你处理" reasons). */
+export const needsYou = (issue: Issue, att: AttentionIndex) =>
+  (issue.status === "in_review" && att.mine.has(issue.id)) || att.replyOwn.has(issue.id) || issue.status === "blocked";
+
+/** The color an issue gets in the tree: red blocked, orange waiting on you, gray otherwise. */
+export function tone(issue: Issue, att: AttentionIndex, cat: Catalog): "bad" | "cta" | "closed" | "" {
+  if (att.replyOwn.has(issue.id)) return "cta";
+  if (issue.status === "blocked") return "bad";
+  if (needsYou(issue, att)) return "cta";
+  return isClosed(issue, cat) ? "closed" : "";
+}
+
+/** The issues `keep` holds for, and every ancestor of them, so each match is shown in place. */
+export function visibleIssues(tree: Tree, keep: (issue: Issue) => boolean): Set<string> {
+  const out = new Set<string>();
+  for (const issue of tree.byId.values()) {
+    if (!keep(issue) || out.has(issue.id)) continue;
+    out.add(issue.id);
+    for (const a of ancestors(tree, issue)) out.add(a.id);
+  }
+  return out;
 }

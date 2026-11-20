@@ -244,6 +244,9 @@ function Conversation({ sessionId, focus }: { sessionId: string; focus: ChatFocu
   const replying = !!pending?.task_id;
   return (
     <aside className="chat" aria-label="对话">
+      <h2 className="chat-head">
+        <span className="avatar" aria-hidden>s</span>super-agent
+      </h2>
       {note && (
         <p className="note" role="status">
           {note} <button type="button" className="link-button" onClick={() => setNote(null)}>知道了</button>

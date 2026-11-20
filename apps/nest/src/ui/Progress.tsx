@@ -1,19 +1,39 @@
 import { Fragment } from "react";
 import type { Issue } from "../api";
-import { progress, SEPARATOR, type Part } from "../model";
+import { byStage, progress, SEPARATOR, statusText, tone, type Part } from "../model";
 import { useWorkspace } from "./context";
 
-/** Ring, `closed/total` and "含 N 个已取消" over the direct children. */
-export function Progress({ kids }: { kids: readonly Issue[] }) {
+/** Thin bar, `closed/total` and "含 N 个已取消" over the direct children. */
+export function Progress({ kids, label = "" }: { kids: readonly Issue[]; label?: string }) {
   const { cat } = useWorkspace();
   const p = progress(kids, cat);
   if (!p) return null;
-  const angle = Math.round((p.closed / p.total) * 360);
   return (
     <span className="progress" data-testid="progress">
-      <span className="ring" style={{ background: `conic-gradient(var(--accent) ${angle}deg, var(--line) 0)` }} aria-hidden />
-      <span>{p.closed}/{p.total}</span>
+      {!label && (
+        <span className="bar" aria-hidden>
+          <span style={{ width: `${(p.closed / p.total) * 100}%` }} />
+        </span>
+      )}
+      <span>{label}{p.closed}/{p.total}</span>
       {p.cancelled > 0 && <span className="muted">含 {p.cancelled} 个已取消</span>}
+    </span>
+  );
+}
+
+/**
+ * One cell per direct child in stage order: closed ones filled, blocked red,
+ * the ones waiting on you orange.
+ * ponytail: cells shrink to 2px past ~150 children; switch to a plain bar then.
+ */
+export function Segments({ kids }: { kids: readonly Issue[] }) {
+  const ws = useWorkspace();
+  if (kids.length === 0) return null;
+  return (
+    <span className="segments" aria-hidden>
+      {[...kids].sort(byStage).map((k) => (
+        <span key={k.id} className={tone(k, ws.att, ws.cat)} title={`${k.identifier} ${statusText(k, ws)}`} />
+      ))}
     </span>
   );
 }
@@ -34,7 +54,7 @@ export function ProgressLine({ parts }: { parts: readonly Part[] }) {
       {parts.map((part, i) => (
         <Fragment key={i}>
           {i > 0 && " "}
-          <span className={part.callToAction ? "part cta" : "part"}>
+          <span className={part.callToAction ? "part cta" : part.alarm ? "part bad" : "part"}>
             {part.text}
             {i < last && <span className="sep">{GLUED}</span>}
           </span>

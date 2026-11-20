@@ -1,4 +1,4 @@
-// Entry: login check, workspace resolution, the three columns, realtime.
+// Entry: login check, workspace resolution, the tree and the chat (layout A), realtime.
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { StrictMode, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
@@ -14,36 +14,25 @@ import {
   indexRuns,
   leftGroups,
   names,
-  topLevelOf,
 } from "./model";
 import { keys, pageState, q } from "./queries";
 import { connect, type EventContext } from "./realtime";
-import { go, issuePath, issuesPath, parse, replace, subscribe, type Route } from "./router";
+import { issuePath, issuesPath, parse, replace, subscribe, type Route } from "./router";
 import { ChatPanel } from "./ui/Chat";
 import { WorkspaceContext, type WorkspaceData } from "./ui/context";
-import { IssueView } from "./ui/IssueView";
-import { LeftPanel } from "./ui/LeftPanel";
+import { Board } from "./ui/Board";
 import { Login } from "./ui/Login";
-import { TopBar, type Mode } from "./ui/TopBar";
-import { Tree } from "./ui/Tree";
+import { TopBar, type Filter } from "./ui/TopBar";
 import "./styles.css";
 
 document.title = PRODUCT_NAME;
 
 const LAST_WS = "nest:last-workspace";
-const MODE = "nest:mode";
+const NO_FILTER: Filter = { text: "", mine: false };
 
 function useRoute(): Route {
   const href = useSyncExternalStore(subscribe, () => location.pathname + location.search + location.hash);
   return useMemo(() => parse(location), [href]); // eslint-disable-line react-hooks/exhaustive-deps
-}
-
-function readMode(): Mode {
-  try {
-    return localStorage.getItem(MODE) === "tree" ? "tree" : "focus";
-  } catch {
-    return "focus";
-  }
 }
 
 function App({ onSignedOut }: { onSignedOut: () => void }) {
@@ -63,7 +52,7 @@ function App({ onSignedOut }: { onSignedOut: () => void }) {
 function SignedIn({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   const route = useRoute();
   const workspaces = useQuery(q.workspaces());
-  const [mode, setMode] = useState<Mode>(readMode);
+  const [filter, setFilter] = useState<Filter>(NO_FILTER);
   const list = workspaces.data ?? [];
   const slug = route.kind === "root" ? null : route.slug;
   const current = slug ? list.find((w) => w.slug === slug) ?? null : null;
@@ -85,6 +74,7 @@ function SignedIn({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
 
   useEffect(() => {
     if (!current) return;
+    setFilter(NO_FILTER);
     try {
       localStorage.setItem(LAST_WS, current.slug);
     } catch {
@@ -99,21 +89,13 @@ function SignedIn({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
       onSignedOut();
     }
   };
-  const changeMode = (m: Mode) => {
-    setMode(m);
-    try {
-      localStorage.setItem(MODE, m);
-    } catch {
-      // ignore
-    }
-  };
 
   if (workspaces.isPending) return <p className="muted center">加载中…</p>;
   if (workspaces.isError) return <p className="error center">工作区没加载出来</p>;
   if (list.length === 0) {
     return (
       <div className="app">
-        <TopBar workspaces={[]} current={null} mode={null} onMode={changeMode} onLogout={() => void signOut()} />
+        <TopBar workspaces={[]} current={null} filter={null} onFilter={setFilter} onLogout={() => void signOut()} />
         <p className="empty center">你还没有加入任何工作区</p>
       </div>
     );
@@ -121,8 +103,8 @@ function SignedIn({ me, onSignedOut }: { me: Me; onSignedOut: () => void }) {
   if (!current) return null;
   return (
     <div className="app">
-      <TopBar workspaces={list} current={current} mode={mode} onMode={changeMode} onLogout={() => void signOut()} />
-      <WorkspacePage key={current.slug} workspace={current} me={me} route={route} mode={mode} onMode={changeMode} />
+      <TopBar workspaces={list} current={current} filter={filter} onFilter={setFilter} onLogout={() => void signOut()} />
+      <WorkspacePage key={current.slug} workspace={current} me={me} route={route} filter={filter} />
     </div>
   );
 }
@@ -131,14 +113,12 @@ function WorkspacePage({
   workspace,
   me,
   route,
-  mode,
-  onMode,
+  filter,
 }: {
   workspace: Workspace;
   me: Me;
   route: Route;
-  mode: Mode;
-  onMode: (m: Mode) => void;
+  filter: Filter;
 }) {
   const slug = workspace.slug;
   const qc = useQueryClient();
@@ -191,12 +171,11 @@ function WorkspacePage({
   }, [data.ready, data.tree, route, slug, fallback]);
 
   const value: WorkspaceData = { ...data, current };
-  const top = current ? topLevelOf(data.tree, current) : null;
   const focus = route.kind === "chat" ? { sessionId: route.sessionId, messageId: route.messageId } : null;
 
   return (
     <WorkspaceContext.Provider value={value}>
-      <div className={`columns mode-${mode}`}>
+      <div className="columns">
         {state.kind === "failed" ? (
           <div className="error center span-issues" role="alert">
             <p>{state.what.join("、")}没加载出来，先不列任务，免得漏掉等你处理的。</p>
@@ -211,21 +190,10 @@ function WorkspacePage({
           </div>
         ) : state.kind === "loading" ? (
           <p className="muted center span-issues">加载任务…</p>
-        ) : mode === "tree" ? (
-          <main className="outline">
-            <Tree onOpen={(i) => { onMode("focus"); go(issuePath(slug, i.id)); }} />
-          </main>
         ) : (
-          <>
-            <LeftPanel selectedTopId={top?.id ?? null} />
-            <main className="middle">
-              {current ? (
-                <IssueView key={current.id} issue={current} commentId={route.kind === "issue" ? route.commentId : null} />
-              ) : (
-                <p className="empty">现在没有进行中的任务，在右边跟 super-agent 说一件事就行</p>
-              )}
-            </main>
-          </>
+          <main className="board" aria-label="任务">
+            <Board current={current} commentId={route.kind === "issue" ? route.commentId : null} filter={filter} />
+          </main>
         )}
         <ChatPanel focus={focus} />
       </div>

@@ -1,22 +1,27 @@
-// Top bar (PRD v4 section 2 rule 5): name, workspace switcher, focus/tree, logout.
+// Top bar (PRD v4 section 2 rule 5, layout A): name, workspace switcher, the
+// tree's search and "只看要我处理的", logout.
 import { useState } from "react";
 import type { Workspace } from "../api";
 import { PRODUCT_NAME } from "../config";
 import { go, issuesPath } from "../router";
 
-export type Mode = "focus" | "tree";
+/** What the tree shows: titles or identifiers containing `text`, and only what waits on you when `mine`. */
+export interface Filter {
+  text: string;
+  mine: boolean;
+}
 
 export function TopBar({
   workspaces,
   current,
-  mode,
-  onMode,
+  filter,
+  onFilter,
   onLogout,
 }: {
   workspaces: Workspace[];
   current: Workspace | null;
-  mode: Mode | null;
-  onMode: (m: Mode) => void;
+  filter: Filter | null;
+  onFilter: (f: Filter) => void;
   onLogout: () => void;
 }) {
   const [menu, setMenu] = useState<"ws" | "account" | null>(null);
@@ -24,7 +29,10 @@ export function TopBar({
   return (
     <header className="topbar">
       <div className="topbar-left">
-        <strong className="product">{PRODUCT_NAME}</strong>
+        <strong className="product">
+          <span className="logo" aria-hidden>{Array.from(PRODUCT_NAME)[0]}</span>
+          {PRODUCT_NAME}
+        </strong>
         {current && (
           <div className="menu">
             <button type="button" aria-haspopup="menu" aria-expanded={menu === "ws"} onClick={() => toggle("ws")}>
@@ -48,14 +56,23 @@ export function TopBar({
             )}
           </div>
         )}
+        {filter && (
+          <>
+            <input
+              type="search"
+              className="search"
+              aria-label="搜索任务"
+              placeholder="搜索任务标题或编号"
+              value={filter.text}
+              onChange={(e) => onFilter({ ...filter, text: e.target.value })}
+            />
+            <button type="button" className="toggle" aria-pressed={filter.mine} onClick={() => onFilter({ ...filter, mine: !filter.mine })}>
+              只看要我处理的
+            </button>
+          </>
+        )}
       </div>
       <div className="topbar-right">
-        {mode && (
-          <div className="segmented" role="group" aria-label="模式">
-            <button type="button" aria-pressed={mode === "focus"} onClick={() => onMode("focus")}>聚焦</button>
-            <button type="button" aria-pressed={mode === "tree"} onClick={() => onMode("tree")}>树形</button>
-          </div>
-        )}
         <div className="menu">
           <button type="button" aria-haspopup="menu" aria-expanded={menu === "account"} onClick={() => toggle("account")}>账号 ▾</button>
           {menu === "account" && (

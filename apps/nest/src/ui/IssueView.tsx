@@ -1,35 +1,23 @@
-// The middle column (PRD v4 3.2): one issue, its ancestors, its sub-issues by
-// stage with who each one waits on, instances, description and comments.
+// The selected issue, opened in place in the tree (layout A), under its row
+// and its sub-issues: ancestors, status, who it waits on, instances,
+// description and comments. Its row already shows the title, assignee and
+// progress.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { ApiError, approve, type Issue, type InstanceBatch } from "../api";
-import {
-  actorName,
-  ancestors,
-  childrenOf,
-  foldedLabel,
-  oneLine,
-  runCounts,
-  stageRows,
-  statusText,
-  stripTitle,
-  waitingOn,
-} from "../model";
+import { ancestors, runCounts, statusText, waitingOn } from "../model";
 import { keys, q } from "../queries";
 import { go, issuePath } from "../router";
 import { Comments } from "./Comments";
 import { useWorkspace } from "./context";
 import { Markdown } from "./Markdown";
-import { Dotted, Progress, ProgressLine } from "./Progress";
+import { Dotted } from "./Progress";
 
 export function IssueView({ issue, commentId }: { issue: Issue; commentId: string | null }) {
   const ws = useWorkspace();
   const { tree, slug } = ws;
   const path = ancestors(tree, issue);
-  const kids = childrenOf(tree, issue.id);
-  const parts = oneLine(issue, kids, ws.att, ws.cat);
   const waiting = waitingOn(issue, ws);
-  const assignee = actorName(ws.names, issue.assignee_type, issue.assignee_id);
 
   return (
     <article className="issue-view" data-issue={issue.identifier}>
@@ -47,21 +35,12 @@ export function IssueView({ issue, commentId }: { issue: Issue; commentId: strin
           </span>
         ))}
       </nav>
-      <header className="issue-head">
-        <h1>
-          <span className="ident">{issue.identifier}</span> {issue.title}
-        </h1>
-        <div className="meta">
-          <span className="status" data-status={issue.status}>{statusText(issue, ws)}</span>
-          {assignee && <span>{assignee}</span>}
-          {waiting && <span className="waiting" data-testid="waiting">{waiting}</span>}
-          {runCounts(ws.runs, issue.id, ws.names).map((c) => <span key={c} className="runs"><Dotted text={c} /></span>)}
-          <Progress kids={kids} />
-          {ws.att.mine.has(issue.id) && issue.status === "in_review" && <Approve issue={issue} />}
-        </div>
-        {parts.length > 0 && <ProgressLine parts={parts} />}
+      <header className="issue-head meta">
+        <span className="status" data-status={issue.status}>{statusText(issue, ws)}</span>
+        {waiting && <span className="waiting" data-testid="waiting">{waiting}</span>}
+        {runCounts(ws.runs, issue.id, ws.names).map((c) => <span key={c} className="runs"><Dotted text={c} /></span>)}
+        {ws.att.mine.has(issue.id) && issue.status === "in_review" && <Approve issue={issue} />}
       </header>
-      {kids.length > 0 && <SubIssues parent={issue} />}
       <Instances issueId={issue.id} />
       {issue.description && (
         <section className="description" aria-label="描述">
@@ -70,71 +49,6 @@ export function IssueView({ issue, commentId }: { issue: Issue; commentId: strin
       )}
       <Comments issueId={issue.id} focusCommentId={commentId} />
     </article>
-  );
-}
-
-function SubIssues({ parent }: { parent: Issue }) {
-  const ws = useWorkspace();
-  const rows = stageRows(childrenOf(ws.tree, parent.id), ws.cat);
-  const [open, setOpen] = useState<Set<string>>(new Set());
-  useEffect(() => setOpen(new Set()), [parent.id]);
-  return (
-    <section className="subissues" aria-label="子任务">
-      {rows.map((row) => {
-        if (row.kind === "group") {
-          return (
-            <div key={`g${row.stage}`} className="stage">
-              <h4>{row.stage === null ? "未分阶段" : `阶段 ${row.stage}`}</h4>
-              {row.issues.map((c) => <SubIssueRow key={c.id} issue={c} parent={parent} />)}
-            </div>
-          );
-        }
-        const id = `f${row.from}`;
-        return (
-          <div key={id} className="stage folded">
-            <button
-              type="button"
-              className="folded-row"
-              aria-expanded={open.has(id)}
-              onClick={() => setOpen((s) => { const n = new Set(s); if (!n.delete(id)) n.add(id); return n; })}
-            >
-              <Dotted text={foldedLabel(row)} />
-            </button>
-            {open.has(id) &&
-              row.groups.map((g) => (
-                <div key={`g${g.stage}`} className="stage">
-                  <h4>{g.stage === null ? "未分阶段" : `阶段 ${g.stage}`}</h4>
-                  {g.issues.map((c) => <SubIssueRow key={c.id} issue={c} parent={parent} />)}
-                </div>
-              ))}
-          </div>
-        );
-      })}
-    </section>
-  );
-}
-
-function SubIssueRow({ issue, parent }: { issue: Issue; parent: Issue }) {
-  const ws = useWorkspace();
-  const kids = childrenOf(ws.tree, issue.id);
-  const waiting = waitingOn(issue, ws);
-  const assignee = actorName(ws.names, issue.assignee_type, issue.assignee_id);
-  return (
-    <div className="sub-row" data-child={issue.identifier}>
-      <span className="ident">{issue.identifier}</span>
-      <a
-        href={issuePath(ws.slug, issue.id)}
-        className="title"
-        onClick={(e) => { e.preventDefault(); go(issuePath(ws.slug, issue.id)); }}
-      >
-        {stripTitle(issue.title, parent.identifier)}
-      </a>
-      <span className="status">{statusText(issue, ws)}</span>
-      {assignee && <span>{assignee}</span>}
-      {waiting && <span className="waiting">{waiting}</span>}
-      {runCounts(ws.runs, issue.id, ws.names).map((c) => <span key={c} className="runs"><Dotted text={c} /></span>)}
-      {kids.length > 0 && <Progress kids={kids} />}
-    </div>
   );
 }
 
