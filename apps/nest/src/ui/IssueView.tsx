@@ -5,7 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { ApiError, approve, type Issue, type InstanceBatch } from "../api";
-import { ancestors, runCounts, waitingOn } from "../model";
+import { ancestors, runCounts, shownStatus, waitingOn } from "../model";
 import { keys, q } from "../queries";
 import { go, issuePath } from "../router";
 import { Comments } from "./Comments";
@@ -18,6 +18,7 @@ export function IssueView({ issue, commentId }: { issue: Issue; commentId: strin
   const { tree, slug } = ws;
   const path = ancestors(tree, issue);
   const waiting = waitingOn(issue, ws);
+  const status = shownStatus(issue, waiting, ws.cat);
 
   return (
     <article className="issue-view" data-issue={issue.identifier}>
@@ -36,8 +37,8 @@ export function IssueView({ issue, commentId }: { issue: Issue; commentId: strin
         ))}
       </nav>
       <header className="issue-head meta">
-        {/* The plain label: "待你验收" would repeat the "等你验收" next to it. */}
-        <span className="status" data-status={issue.status}>{ws.cat.label(issue.status)}</span>
+        {/* The plain label, and none when 在等谁 says it already (待规划, 阻塞，等你处理). */}
+        {status && <span className="status" data-status={issue.status}>{status}</span>}
         {waiting && <span className="waiting" data-testid="waiting">{waiting}</span>}
         {runCounts(ws.runs, issue.id, ws.names).map((c) => <span key={c} className="runs"><Dotted text={c} /></span>)}
         {ws.att.mine.has(issue.id) && issue.status === "in_review" && <Approve issue={issue} />}

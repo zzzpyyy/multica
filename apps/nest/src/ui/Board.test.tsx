@@ -117,6 +117,34 @@ describe("rows (观察 1, 观察 2, 问题 4)", () => {
   });
 });
 
+describe("the detail header says each thing once (一鸣 11-20)", () => {
+  seq = 0;
+  const list = [
+    issue("P", "in_progress"),
+    issue("A", "todo", { parent_issue_id: "P", stage: 1 }),
+    issue("C", "backlog", { parent_issue_id: "P", stage: 1 }),
+    issue("E", "blocked", { parent_issue_id: "P", stage: 1 }),
+    issue("R", "in_review", { parent_issue_id: "P", stage: 1 }),
+    issue("O", "in_review", { parent_issue_id: "P", stage: 1 }),
+  ];
+  const head = (id: string) => {
+    const { html } = page(list, id, { in_review: [{ issue_id: "R", ancestor_ids: ["P"] }] });
+    const h = html.match(/<header class="issue-head meta">(.*?)<\/header>/)?.[1] ?? "";
+    return { status: h.match(/class="status"[^>]*>(.*?)</)?.[1] ?? null, waiting: h.match(/data-testid="waiting">(.*?)</)?.[1] ?? null };
+  };
+
+  it("待规划 and 阻塞 are written once, by 在等谁", () => {
+    expect(head("C")).toEqual({ status: null, waiting: "待规划" });
+    expect(head("E")).toEqual({ status: null, waiting: "阻塞，等你处理" });
+    expect(head("O")).toEqual({ status: null, waiting: "审核中" });
+  });
+
+  it("a status that says something else stays", () => {
+    expect(head("A")).toEqual({ status: "待办", waiting: "等 TL" });
+    expect(head("R")).toEqual({ status: "审核中", waiting: "等你验收" });
+  });
+});
+
 describe("no_response", () => {
   it("shows the Chinese line instead of the stored English fallback", () => {
     const html = renderToStaticMarkup(<MessageBody message={{ content: "The agent finished this turn without a text reply.", message_kind: "no_response" }} />);
