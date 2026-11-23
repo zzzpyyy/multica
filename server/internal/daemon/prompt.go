@@ -795,6 +795,9 @@ func buildChatPrompt(task Task) string {
 	default:
 		b.WriteString("Audience: direct room.\n\n")
 	}
+	if task.NoTools {
+		writeNoToolsChatRules(&b, task.Agent) // Fork (B)
+	}
 	// Channel awareness (MUL-3871). When the session is backed by an IM channel,
 	// the agent must KNOW it is operating inside that channel — otherwise an ask
 	// like "what did you just talk about" sends it to read Multica instead of the

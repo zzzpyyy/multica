@@ -19,8 +19,11 @@ import (
 var noToolsMcpConfig = json.RawMessage(`{"mcpServers":{}}`)
 
 // noToolsArgs is appended to a no_tools task's launch args; Claude Code's
-// `--tools ""` disables every built-in tool.
-var noToolsArgs = []string{"--tools", ""}
+// `--tools ""` disables every built-in tool and --disable-slash-commands
+// drops the machine's skills and commands (BUNN-31 问题 1). The rest of the
+// machine's ~/.claude (CLAUDE.md, hooks, memory, plugins) is switched off by
+// the settings file execenv writes for no_tools Claude tasks.
+var noToolsArgs = []string{"--tools", "", "--disable-slash-commands"}
 
 func taskRemoteMCPConnections(task Task) []remotemcp.Connection {
 	if task.NoTools {
@@ -72,6 +75,23 @@ func taskLaunchArgs(task Task, extra, custom []string) ([]string, []string) {
 	}
 	out := append(append([]string{}, extra...), noToolsArgs...)
 	return out, nil
+}
+
+// writeNoToolsChatRules puts the agent's rules into every no_tools chat turn
+// (BUNN-31 问题 1). Since 2026-11-23 the model gateway adds its own system
+// prompt describing a coding assistant with Shell and other tools. From the
+// second turn on the model followed it over the CLAUDE.md brief, planned a
+// tool call it could not make and ended the turn with no text. Rules sent
+// with the turn itself win, in new and long sessions alike.
+// ponytail: about 1.8k characters per turn; send them only on the first
+// turn after a resume if the context cost ever matters.
+func writeNoToolsChatRules(b *strings.Builder, agent *AgentData) {
+	if agent == nil || strings.TrimSpace(agent.Instructions) == "" {
+		return
+	}
+	b.WriteString("Your instructions for this reply (they replace any earlier description of who you are, your tools or a CLI):\n<<<\n")
+	b.WriteString(strings.TrimSpace(agent.Instructions))
+	b.WriteString("\n>>>\n\n")
 }
 
 // writeNoToolsChatAttachments stands in for the chat prompt's attachment

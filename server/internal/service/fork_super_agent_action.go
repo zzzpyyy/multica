@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -139,15 +138,15 @@ func (s *TaskService) loadSuperTurn(ctx context.Context, q *db.Queries, task db.
 func (s *TaskService) planSuperAction(ctx context.Context, q *db.Queries, task db.AgentTaskQueue, body string) (string, *superPlan) {
 	visible, raw, ok := splitSuperAction(body)
 	if !ok {
-		return capReply(body, superReplyMaxRunes), nil
+		return strings.TrimSpace(body), nil
 	}
 	var act superAction
 	if err := json.Unmarshal([]byte(strings.TrimSpace(raw)), &act); err != nil {
-		return capReply(visible, superReplyMaxRunes), nil // malformed: strip it, do nothing
+		return strings.TrimSpace(visible), nil // malformed: strip it, do nothing
 	}
 	turn, err := s.loadSuperTurn(ctx, q, task)
 	if err != nil {
-		return capReply(visible, superReplyMaxRunes), nil
+		return strings.TrimSpace(visible), nil
 	}
 	switch act.Type {
 	case "create_issues":
@@ -167,9 +166,9 @@ func (s *TaskService) planSuperAction(ctx context.Context, q *db.Queries, task d
 		if kind == "set_status" {
 			p.Status = strings.TrimSpace(act.Status)
 		}
-		return orDefault(capReply(visible, superReplyMaxRunes), "好的。"), &superPlan{kind: kind, payload: p}
+		return orDefault(strings.TrimSpace(visible), "好的。"), &superPlan{kind: kind, payload: p}
 	}
-	return capReply(visible, superReplyMaxRunes), nil // answer/ask belong to answer turns; ignored here
+	return strings.TrimSpace(visible), nil // answer/ask belong to answer turns; ignored here
 }
 
 func orDefault(s, d string) string {
@@ -179,48 +178,13 @@ func orDefault(s, d string) string {
 	return s
 }
 
-// superReplyMaxRunes is rule 8's limit on a reply outside the plan card.
-const superReplyMaxRunes = 100
+// The model's text is stored as written (BUNN-31 问题 2, 一鸣 2026-11-23): a
+// server cut could drop a name list, a question or a refusal. Rule 8's 100
+// characters is INSTRUCTIONS.md's job, and QA fails a reply that runs over.
 
-// cardNote is the text above a plan card. The card shows every field, so
-// text that runs past rule 8's 100 characters is the model restating it
-// (B13); the server replaces it with the one sentence the card needs.
+// cardNote is the text above a plan card; a card with no text gets one line.
 func cardNote(visible string) string {
-	if v := strings.TrimSpace(visible); v != "" && utf8.RuneCountInString(v) <= superReplyMaxRunes {
-		return v
-	}
-	return "请确认下面的计划。"
-}
-
-// capReply holds the model's own text to rule 8's limit (B13, B14): whole
-// sentences that fit, cut with "…" only when the first sentence alone is too
-// long. Server-written notes (not found, refusals) are not passed here.
-// ponytail: a cut can drop a trailing question; INSTRUCTIONS.md keeps
-// replies short, so this is a backstop that should rarely fire.
-func capReply(s string, max int) string {
-	s = strings.TrimSpace(s)
-	if v, ok := fitSentences(s, max); ok {
-		return v
-	}
-	return string([]rune(s)[:max-1]) + "…"
-}
-
-// fitSentences returns s if it fits in max runes, else its longest prefix
-// that ends a sentence (。！？!?), however early; ok is false when even the
-// first sentence is longer. A line break is not a sentence end: cutting there
-// can leave a dangling "：" or a bare list item.
-func fitSentences(s string, max int) (string, bool) {
-	r := []rune(s)
-	if len(r) <= max {
-		return s, true
-	}
-	for i := max - 1; i >= 0; i-- {
-		switch r[i] {
-		case '。', '！', '？', '!', '?':
-			return string(r[:i+1]), true
-		}
-	}
-	return "", false
+	return orDefault(strings.TrimSpace(visible), "请确认下面的计划。")
 }
 
 // superDirectory is the workspace directory assignees are matched against
@@ -320,7 +284,7 @@ func (d superDirectory) notFound(missing []string) string {
 func (s *TaskService) planCreateIssues(ctx context.Context, q *db.Queries, turn superTurn, visible string, act superAction) (string, *superPlan) {
 	dir := s.loadSuperDirectory(ctx, q, turn.session)
 	if len(act.Issues) == 0 {
-		return capReply(visible, superReplyMaxRunes), nil
+		return strings.TrimSpace(visible), nil
 	}
 	var missing []string
 	needsDetail := false
@@ -352,11 +316,8 @@ func (s *TaskService) planCreateIssues(ctx context.Context, q *db.Queries, turn 
 	if len(missing) > 0 { // B10: the whole reply becomes the not-found note
 		return dir.notFound(missing), nil
 	}
-	if needsDetail { // rule 2, B11/B17
-		const ask = "\n\n还需要说明：要做什么 / 怎样算完成。"
-		// The model's sentences that fit beside the ask; none fit -> the ask alone.
-		note, _ := fitSentences(strings.TrimSpace(visible), superReplyMaxRunes-utf8.RuneCountInString(ask))
-		return strings.TrimSpace(note + ask), nil
+	if needsDetail { // rule 2, B11/B17: the model's text, then the ask
+		return strings.TrimSpace(strings.TrimSpace(visible) + "\n\n还需要说明：要做什么 / 怎样算完成。"), nil
 	}
 	return cardNote(visible), &superPlan{kind: "create_issues", payload: map[string]any{"items": items}}
 }

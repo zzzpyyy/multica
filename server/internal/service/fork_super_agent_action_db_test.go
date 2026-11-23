@@ -77,27 +77,6 @@ func TestSplitSuperAction(t *testing.T) {
 	}
 }
 
-func TestCapReply(t *testing.T) {
-	// B11 on S00 (QA, batch 3 retest): 108 characters, sentence ends at
-	// characters 11 and 26 only. It was cut mid-sentence ("…并说明周报整…")
-	// because the search for a sentence end stopped at character 33. The
-	// directory names are replaced by same-length placeholders.
-	b11 := "是指刚才的整理周报吗？张三不在目录里，没法交给张三。请从研发小队甲组、前端甲、后端、测试、组长、TA、TB、TL、qa、member-alpha、qa-member-2 中选一个负责人，并说明周报整理成什么样算完成。"
-	for _, tc := range []struct{ in, want string }{
-		{b11, "是指刚才的整理周报吗？张三不在目录里，没法交给张三。"},
-		{"短句。" + strings.Repeat("长", 120), "短句。"},                                                      // one early sentence still wins over "…"
-		{strings.Repeat("长", 90) + "。" + strings.Repeat("后", 20) + "？", strings.Repeat("长", 90) + "。"}, // last end that fits
-		{"列表：\n" + strings.Repeat("长", 120), "列表：\n" + strings.Repeat("长", 95) + "…"},                  // a line break is not an end
-		{strings.Repeat("长", 150), strings.Repeat("长", 99) + "…"},                                      // first sentence too long
-		{"  不超过就原样。  ", "不超过就原样。"},
-	} {
-		got := capReply(tc.in, 100)
-		if got != tc.want || len([]rune(got)) > 100 {
-			t.Errorf("capReply(%q) = %q (%d), want %q", tc.in, got, len([]rune(got)), tc.want)
-		}
-	}
-}
-
 func TestPlanCreateIssues(t *testing.T) {
 	f := newSuperFixture(t)
 	f.turn("给尤雨溪建个任务：看板支持暗色模式，完成标准是系统切到深色时看板跟着变深色，先别跑")
@@ -112,35 +91,37 @@ func TestPlanCreateIssues(t *testing.T) {
 		t.Fatalf("item = %+v", items)
 	}
 
-	// B13: text over 100 characters above a card is the card restated; the
-	// server keeps one sentence. Short text stays as the model wrote it.
-	long := "请确认这两个任务：\n\n" + strings.Repeat("- 标题：排查接口超时\n- 负责人：彦宏\n- 状态：backlog\n", 4)
-	visible, plan = f.plan(strings.Replace(fence(`{"type":"create_issues","issues":[{"title":"看板暗色模式","assignee":"尤雨溪","status":"backlog","what":"看板支持暗色模式","done":"切到深色时看板变深色"}]}`), "好的。", long, 1))
+	// BUNN-31 问题 2: the model's text is stored as written, however long. A
+	// cut used to drop a trailing name list, question or refusal. The B11 text
+	// is from S00 with the directory names replaced by placeholders.
+	b11 := "是指刚才的整理周报吗？张三不在目录里，没法交给张三。请从研发小队甲组、前端甲、后端、测试、组长、TA、TB、TL、qa、member-alpha、qa-member-2 中选一个负责人，并说明周报整理成什么样算完成。"
+	refusal := strings.Repeat("我没有工具，不能直接改代码或执行命令。", 6) + "要我出一张卡片交给尤雨溪吗？"
+	list := "找不到张三。可选：\n" + strings.Repeat("- 研发小队甲组\n- 前端甲\n", 8) + "交给谁？"
+	for _, text := range []string{b11, refusal, list} {
+		if visible, plan = f.plan("  " + text + "\n"); plan != nil || visible != text {
+			t.Fatalf("reply without a card changed:\n%q\nwant\n%q", visible, text)
+		}
+		visible, plan = f.plan(strings.Replace(fence(`{"type":"create_issues","issues":[{"title":"看板暗色模式","assignee":"尤雨溪","status":"backlog","what":"看板支持暗色模式","done":"切到深色时看板变深色"}]}`), "好的。", text, 1))
+		if plan == nil || visible != text {
+			t.Fatalf("text above a card changed: plan %v\n%q", plan != nil, visible)
+		}
+		visible, plan = f.plan(strings.Replace(fence(`{"type":"create_issues","issues":[{"title":"优化看板","assignee":"尤雨溪","what":"优化看板","done":""}]}`), "好的。", text, 1))
+		if plan != nil || visible != text+"\n\n还需要说明：要做什么 / 怎样算完成。" {
+			t.Fatalf("ask reply changed the model's text:\n%q", visible)
+		}
+		visible, plan = f.plan(strings.Replace(fence(`{"type":"forward","issue":"BUNN-3"}`), "好的。", text, 1))
+		if plan == nil || visible != text {
+			t.Fatalf("text above a forward changed:\n%q", visible)
+		}
+	}
+	// A card with no text gets one line; an ask with no text is the ask alone.
+	visible, plan = f.plan("```super-action\n" + `{"type":"create_issues","issues":[{"title":"看板暗色模式","assignee":"尤雨溪","status":"backlog","what":"看板支持暗色模式","done":"切到深色时看板变深色"}]}` + "\n```")
 	if plan == nil || visible != "请确认下面的计划。" {
-		t.Fatalf("long card text: plan %v, reply %q", plan != nil, visible)
+		t.Fatalf("card with no text: plan %v, reply %q", plan != nil, visible)
 	}
-
-	// B13/B14: a reply without a card keeps the sentences that fit in 100.
-	chatty := strings.Repeat("我负责和你把需求聊清楚，然后出计划卡片。", 6) + "还有别的吗？" // 126 runes
-	visible, plan = f.plan(chatty)
-	if plan != nil || len([]rune(visible)) > 100 || !strings.HasSuffix(visible, "。") || !strings.HasPrefix(chatty, visible) {
-		t.Fatalf("long reply: %d runes %q", len([]rune(visible)), visible)
-	}
-	if got := capReply(strings.Repeat("长", 150), 100); len([]rune(got)) != 100 || !strings.HasSuffix(got, "…") {
-		t.Fatalf("no sentence end: %d runes", len([]rune(got)))
-	}
-	visible, _ = f.plan(fence(`{"type":"create_issues","issues":[{"title":"优化看板","assignee":"尤雨溪","what":"优化看板","done":""}]}`))
-	if strings.Contains(visible, "好的。") == false || len([]rune(visible)) > 100 {
-		t.Fatalf("ask reply: %q", visible)
-	}
-	visible, _ = f.plan(strings.Replace(fence(`{"type":"create_issues","issues":[{"title":"优化看板","assignee":"尤雨溪","what":"优化看板","done":""}]}`), "好的。", chatty, 1))
-	if n := len([]rune(visible)); n > 100 || !strings.HasSuffix(visible, "还需要说明：要做什么 / 怎样算完成。") {
-		t.Fatalf("long ask reply: %d runes %q", n, visible)
-	}
-	// No whole sentence fits beside the ask: the ask alone, never a "…" cut.
-	visible, _ = f.plan(strings.Replace(fence(`{"type":"create_issues","issues":[{"title":"优化看板","assignee":"尤雨溪","what":"优化看板","done":""}]}`), "好的。", strings.Repeat("长", 120), 1))
+	visible, _ = f.plan("```super-action\n" + `{"type":"create_issues","issues":[{"title":"优化看板","assignee":"尤雨溪","what":"优化看板","done":""}]}` + "\n```")
 	if visible != "还需要说明：要做什么 / 怎样算完成。" {
-		t.Fatalf("one long sentence before the ask: %q", visible)
+		t.Fatalf("ask with no text: %q", visible)
 	}
 
 	// B10: an unknown assignee replaces the reply with the directory; no card.

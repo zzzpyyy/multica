@@ -1,6 +1,59 @@
 package execenv
 
-import "strings"
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/multica-ai/multica/server/pkg/agent"
+)
+
+// claudeNoToolsSettingsFile is the --settings file of a no_tools Claude task.
+const claudeNoToolsSettingsFile = "claude-no-tools-settings.json"
+
+// prepareClaudeNoToolsSettings writes the --settings file of a no_tools
+// Claude task (BUNN-31 问题 1). The daemon runs with the machine's HOME, so
+// Claude Code would load the user's ~/.claude CLAUDE.md, hooks, auto memory
+// and plugins into the super-agent's context. Flag settings rank above user
+// settings, so this file turns them off for this process only; ~/.claude is
+// not touched, and credentials, base URL and model still come from it.
+// claudeMdExcludes keeps only the brief (it is matched with symlinks left
+// in, so a symlinked workdir lists both paths in one negated pattern; two
+// negations would exclude everything). Skills and slash commands go with
+// --disable-slash-commands (daemon noToolsArgs).
+// ponytail: plugins are read from the daemon's own Claude config dir; an
+// agent custom_env CLAUDE_CONFIG_DIR would point elsewhere. The super-agent
+// has none.
+func prepareClaudeNoToolsSettings(envRoot, workDir string) (string, error) {
+	brief := filepath.Join(workDir, "CLAUDE.md")
+	keep := "!" + brief
+	if real, err := filepath.EvalSymlinks(workDir); err == nil && real != workDir {
+		keep = "!{" + brief + "," + filepath.Join(real, "CLAUDE.md") + "}"
+	}
+	plugins := map[string]bool{}
+	if dir, err := agent.ClaudeConfigDir(nil, workDir); err == nil {
+		var user struct {
+			EnabledPlugins map[string]json.RawMessage `json:"enabledPlugins"`
+		}
+		if data, err := os.ReadFile(filepath.Join(dir, "settings.json")); err == nil && json.Unmarshal(data, &user) == nil {
+			for id := range user.EnabledPlugins {
+				plugins[id] = false
+			}
+		}
+	}
+	data, err := json.Marshal(map[string]any{
+		"disableAllHooks":   true,
+		"autoMemoryEnabled": false,
+		"claudeMdExcludes":  []string{keep},
+		"enabledPlugins":    plugins,
+	})
+	if err != nil {
+		return "", err
+	}
+	path := filepath.Join(envRoot, claudeNoToolsSettingsFile)
+	return path, os.WriteFile(path, data, 0o600)
+}
 
 // Fork (B, BUNN-31 问题 5): the brief of a no_tools chat (the super-agent). It
 // launches with no tools, so it gets none of the brief's CLI, command, upload

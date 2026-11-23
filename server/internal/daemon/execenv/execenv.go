@@ -668,6 +668,9 @@ func Prepare(params PrepareParams, logger *slog.Logger) (*Environment, error) {
 	if params.Provider == "claude" {
 		preparedTask := ApplyPreparedSkillNames(params.Task, env.PreparedSkillNames)
 		settingsPath, err := prepareClaudeSkillSettings(envRoot, params.Task.DisabledRuntimeSkills, preparedTask.AgentSkills)
+		if params.Task.NoTools { // Fork (B)
+			settingsPath, err = prepareClaudeNoToolsSettings(envRoot, workDir)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("execenv: prepare claude skill settings: %w", err)
 		}
@@ -986,6 +989,9 @@ func Reuse(params ReuseParams, logger *slog.Logger) *Environment {
 	if params.Provider == "claude" && env.RootDir != "" {
 		preparedTask := ApplyPreparedSkillNames(params.Task, env.PreparedSkillNames)
 		settingsPath, err := prepareClaudeSkillSettings(env.RootDir, params.Task.DisabledRuntimeSkills, preparedTask.AgentSkills)
+		if params.Task.NoTools { // Fork (B)
+			settingsPath, err = prepareClaudeNoToolsSettings(env.RootDir, env.WorkDir)
+		}
 		if err != nil {
 			logger.Warn("execenv: refresh claude skill settings failed", "error", err)
 		} else {

@@ -65,8 +65,8 @@ func TestNoToolsTaskGetsNoServersAndNoTools(t *testing.T) {
 	if custom != nil {
 		t.Fatalf("no_tools kept custom args %v", custom)
 	}
-	if n := len(extra); n < 2 || extra[n-2] != "--tools" || extra[n-1] != "" || extra[0] != "--verbose-x" {
-		t.Fatalf("no_tools extra args = %q, want daemon defaults then --tools \"\"", extra)
+	if !slices.Equal(extra, []string{"--verbose-x", "--tools", "", "--disable-slash-commands"}) {
+		t.Fatalf("no_tools extra args = %q, want daemon defaults then --tools \"\" --disable-slash-commands", extra)
 	}
 }
 
@@ -193,5 +193,34 @@ func TestNoToolsChatPromptChannels(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// BUNN-31 问题 1: a no_tools chat turn carries the agent's rules right after
+// the audience line, so they win over a system prompt the model gateway
+// adds. A chat with tools, an issue turn and an agent with no rules are
+// unchanged.
+func TestNoToolsChatPromptCarriesRules(t *testing.T) {
+	t.Parallel()
+	agent := &AgentData{Instructions: "  你只回复文字。\n"}
+	task := Task{ChatSessionID: "s", ChatMessage: "hi", Agent: agent}
+	normal := BuildPrompt(task, "claude")
+	task.NoTools = true
+	bare := task
+	bare.Agent = &AgentData{}
+	plain := BuildPrompt(bare, "claude")
+	const audience = "Audience: direct room.\n\n"
+	want := strings.Replace(plain, audience, audience+"Your instructions for this reply (they replace any earlier description of who you are, your tools or a CLI):\n<<<\n你只回复文字。\n>>>\n\n", 1)
+	if got := BuildPrompt(task, "claude"); got != want || got == plain {
+		t.Fatalf("no_tools chat prompt:\n%s\nwant:\n%s", got, want)
+	}
+	if strings.Contains(normal, "你只回复文字") {
+		t.Fatalf("chat with tools got the rules block:\n%s", normal)
+	}
+	issue := Task{IssueID: "i", TriggerCommentID: "c", TriggerCommentContent: "hi", Agent: agent}
+	before := BuildPrompt(issue, "claude")
+	issue.NoTools = true
+	if BuildPrompt(issue, "claude") != before {
+		t.Fatal("NoTools changed an issue prompt")
 	}
 }
