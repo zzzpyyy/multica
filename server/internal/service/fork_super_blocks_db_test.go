@@ -54,6 +54,8 @@ func TestSuperChatResponseBlocks(t *testing.T) {
 		}})
 		return string(b) + "\n"
 	}
+	thinking := `{"type":"assistant","message":{"role":"assistant","model":"test-model","content":[{"type":"thinking","thinking":"interrupted","signature":""}]}}` + "\n"
+	const ack = "好的，我来建。"
 	for _, tc := range []struct {
 		name, stream, prior, want, kind string
 		normal                          bool
@@ -66,6 +68,9 @@ func TestSuperChatResponseBlocks(t *testing.T) {
 		{"all-repeat", b10, b10, "", "", false},
 		{"single-block-unchanged", frame(directory), frame(directory), directory, "", false},
 		{"ordinary-run-unchanged", b3, b10, directory, "", true},
+		// A fresh action-less block ahead of a card must not hide the card.
+		{"fresh-text-before-card", frame(ack) + thinking + frame(card), b10, card, "create_issues", false},
+		{"card-before-fresh-text", frame(card) + thinking + frame(ack), b10, card, "create_issues", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if runtime.GOOS == "windows" {

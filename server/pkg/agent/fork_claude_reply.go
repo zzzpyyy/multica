@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 // Fork (B): a no-tools chat has no intermediate tool commentary. Some gateways
@@ -68,11 +69,52 @@ func (r *claudeChatReply) selectText(output, resumeID string, snapshot *claudeUs
 			return "", fmt.Errorf("read prior Claude replies: %w", err)
 		}
 	}
-	for _, text := range r.texts {
-		if _, replay := prior[sha256.Sum256([]byte(text))]; !replay {
+	// The first new block carrying an action wins, so a fresh "I'll create it"
+	// ahead of the card cannot hide the card; otherwise the first new block.
+	first := -1
+	for i, text := range r.texts {
+		if _, replay := prior[sha256.Sum256([]byte(text))]; replay {
+			continue
+		}
+		if _, _, ok := SplitSuperAction(text); ok {
 			return text, nil
 		}
+		if first < 0 {
+			first = i
+		}
 	}
-	// All blocks repeat history: no output and, crucially, no action to execute.
-	return "", nil
+	if first < 0 {
+		// All blocks repeat history: no output and, crucially, no action to execute.
+		return "", nil
+	}
+	return r.texts[first], nil
+}
+
+const superActionFence = "```super-action\n"
+
+// SplitSuperAction separates a trailing super-action fence from the visible
+// reply. Only a fence at the very end counts; anything else stays visible.
+// The server stores cards with this same parse, so a block selected here for
+// its action is exactly a block the server turns into that action.
+func SplitSuperAction(output string) (visible, raw string, ok bool) {
+	normalized := strings.ReplaceAll(output, "\r\n", "\n")
+	trimmed := strings.TrimRight(normalized, " \t\n")
+	if !strings.HasSuffix(trimmed, "\n```") && trimmed != strings.TrimSuffix(superActionFence, "\n")+"```" {
+		return output, "", false
+	}
+	withoutClose := strings.TrimSuffix(trimmed, "```")
+	withoutClose = strings.TrimSuffix(withoutClose, "\n")
+	start := strings.LastIndex(withoutClose, "\n"+superActionFence)
+	switch {
+	case start >= 0:
+		visible, raw = withoutClose[:start], withoutClose[start+1+len(superActionFence):]
+	case strings.HasPrefix(withoutClose, superActionFence):
+		raw = strings.TrimPrefix(withoutClose, superActionFence)
+	default:
+		return output, "", false
+	}
+	if strings.Contains(raw, "\n```") { // the fence closed earlier: not the trailing block
+		return output, "", false
+	}
+	return strings.TrimRight(visible, " \t\n"), raw, true
 }

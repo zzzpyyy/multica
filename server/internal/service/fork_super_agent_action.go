@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/multica-ai/multica/server/internal/util"
+	"github.com/multica-ai/multica/server/pkg/agent"
 	db "github.com/multica-ai/multica/server/pkg/db/generated"
 )
 
@@ -19,8 +20,6 @@ import (
 // and stores the result in super_agent_action in the same transaction as the
 // reply. Cards (create_issues, add_instances) wait for the user's confirm;
 // forward / set_status are executed right after the turn commits.
-
-const superActionFence = "```super-action\n"
 
 type superAction struct {
 	Type     string          `json:"type"`
@@ -84,30 +83,9 @@ type superPlan struct {
 
 func (p *superPlan) isCard() bool { return p.kind == "create_issues" || p.kind == "add_instances" }
 
-// splitSuperAction separates a trailing super-action fence from the visible
-// reply. Only a fence at the very end counts; anything else stays visible.
-func splitSuperAction(output string) (visible, raw string, ok bool) {
-	normalized := strings.ReplaceAll(output, "\r\n", "\n")
-	trimmed := strings.TrimRight(normalized, " \t\n")
-	if !strings.HasSuffix(trimmed, "\n```") && trimmed != strings.TrimSuffix(superActionFence, "\n")+"```" {
-		return output, "", false
-	}
-	withoutClose := strings.TrimSuffix(trimmed, "```")
-	withoutClose = strings.TrimSuffix(withoutClose, "\n")
-	start := strings.LastIndex(withoutClose, "\n"+superActionFence)
-	switch {
-	case start >= 0:
-		visible, raw = withoutClose[:start], withoutClose[start+1+len(superActionFence):]
-	case strings.HasPrefix(withoutClose, superActionFence):
-		raw = strings.TrimPrefix(withoutClose, superActionFence)
-	default:
-		return output, "", false
-	}
-	if strings.Contains(raw, "\n```") { // the fence closed earlier: not the trailing block
-		return output, "", false
-	}
-	return strings.TrimRight(visible, " \t\n"), raw, true
-}
+// splitSuperAction is the agent package's parse, shared with the Claude chat
+// block selector so "this block carries an action" means the same on both sides.
+var splitSuperAction = agent.SplitSuperAction
 
 // superTurn is this chat turn's user input.
 type superTurn struct {

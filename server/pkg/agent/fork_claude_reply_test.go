@@ -21,6 +21,11 @@ func TestClaudeChatReplyHistoryGate(t *testing.T) {
 	if got, err := multiple.selectText("two", "", nil); err != nil || got != "one" {
 		t.Fatalf("fresh multi block = %q, %v", got, err)
 	}
+	card := "plan\n\n```super-action\n{}\n```"
+	withCard := claudeChatReply{texts: []string{"one", card, "two"}}
+	if got, err := withCard.selectText("two", "", nil); err != nil || got != card {
+		t.Fatalf("action block not preferred: %q, %v", got, err)
+	}
 	if got, err := multiple.selectText("two", "resumed", nil); err == nil || got != "" {
 		t.Fatalf("missing history was trusted: %q, %v", got, err)
 	}
