@@ -1,9 +1,14 @@
 package agent
 
 import (
+	"context"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
 	"testing"
+	"time"
 )
 
 // Fork (B): a missing/unreadable history cannot authorize replayed actions.
@@ -36,5 +41,44 @@ func TestClaudeChatReplyHistoryGate(t *testing.T) {
 	}
 	if got, err := multiple.selectText("two", "resumed", snapshot); err == nil || got != "" {
 		t.Fatalf("truncated history was trusted: %q, %v", got, err)
+	}
+}
+
+// Single-block completion and transcript semantics stay upstream-compatible,
+// including failures and a terminal result that differs from the text frame.
+func TestClaudeChatSingleBlockCompatibility(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX fake executable")
+	}
+	for _, isError := range []bool{false, true} {
+		for _, noTools := range []bool{false, true} {
+			root := t.TempDir()
+			path := filepath.Join(root, "claude")
+			result := "success"
+			errorFlag := "false"
+			wantStatus, wantOutput := "completed", "terminal"
+			if isError {
+				result, errorFlag, wantStatus, wantOutput = "error", "true", "failed", ""
+			}
+			script := "#!/bin/sh\nIFS= read -r _\ncat <<'RESPONSE'\n" +
+				`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"visible"}]}}` + "\n" +
+				`{"type":"result","subtype":"` + result + `","is_error":` + errorFlag + `,"result":"terminal"}` + "\nRESPONSE\n"
+			writeTestExecutable(t, path, []byte(script))
+			b := &claudeBackend{cfg: Config{ExecutablePath: path, Logger: slog.Default(), Env: map[string]string{"IS_SANDBOX": "1"}}}
+			session, err := b.Execute(context.Background(), "test", ExecOptions{NoToolsChat: noTools, Timeout: time.Second * 5})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var emitted []string
+			for msg := range session.Messages {
+				if msg.Type == MessageText {
+					emitted = append(emitted, msg.Content)
+				}
+			}
+			r := <-session.Result
+			if r.Status != wantStatus || r.Output != wantOutput || !slices.Equal(emitted, []string{"visible"}) {
+				t.Fatalf("noTools=%v error=%v: output %q, status %s, emitted %q", noTools, isError, r.Output, r.Status, emitted)
+			}
+		}
 	}
 }

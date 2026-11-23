@@ -72,7 +72,7 @@ func TestSuperChatResponseBlocks(t *testing.T) {
 				t.Skip("fake Claude executable uses a POSIX shell")
 			}
 			f := newSuperFixture(t)
-			f.fx.Exec(t, `UPDATE agent SET name='前端甲' WHERE workspace_id=$1 AND name='尤雨溪'`, f.fx.WorkspaceID)
+			f.fx.Exec(t, `UPDATE agent SET name='前端甲' WHERE workspace_id=$1 AND description='前端' AND system_key IS NULL`, f.fx.WorkspaceID)
 			f.turn("给前端甲建个任务：看板卡片支持拖拽排序 76758，完成标准是刷新页面顺序不变，先别跑")
 			root := t.TempDir()
 			config := filepath.Join(root, "config")

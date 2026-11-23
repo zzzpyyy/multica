@@ -478,13 +478,21 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 
 		// Fork (B): select before publishing any text. The stored reply and action
 		// are derived from this same output, not Claude Code's last-block result.
-		if chatReply != nil && finalStatus == "completed" {
-			var err error
-			finalOutput, err = chatReply.selectText(finalOutput, opts.ResumeSessionID, usageSnapshot)
-			if err != nil {
-				finalStatus, finalError = "failed", err.Error()
-			} else if finalOutput != "" {
-				trySend(msgCh, Message{Type: MessageText, Content: finalOutput})
+		if chatReply != nil {
+			if len(chatReply.texts) < 2 {
+				// Preserve single-block transcripts even on a failed run, and keep
+				// the CLI's terminal output (which may differ) authoritative.
+				for _, text := range chatReply.texts {
+					trySend(msgCh, Message{Type: MessageText, Content: text})
+				}
+			} else if finalStatus == "completed" {
+				var err error
+				finalOutput, err = chatReply.selectText(finalOutput, opts.ResumeSessionID, usageSnapshot)
+				if err != nil {
+					finalStatus, finalError = "failed", err.Error()
+				} else if finalOutput != "" {
+					trySend(msgCh, Message{Type: MessageText, Content: finalOutput})
+				}
 			}
 		}
 
