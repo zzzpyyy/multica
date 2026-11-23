@@ -8924,6 +8924,8 @@ func (d *Daemon) runTask(ctx context.Context, task Task, provider string, slot i
 		idleWatchdogTimeout = d.cfg.OpenCodeIdleWatchdog
 	}
 	execOpts := agent.ExecOptions{
+		NoToolsChat: task.NoTools && task.ChatSessionID != "", // Fork (B)
+
 		EnableTaskSupplement:       taskSupplementNegotiated,
 		CursorHookCommand:          cursorHookCommand,
 		Cwd:                        env.WorkDir,

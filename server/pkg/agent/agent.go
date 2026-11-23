@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 // Package agent provides a unified interface for executing prompts via
 // coding agents (Claude Code, CodeBuddy, Codex, Copilot, OpenCode, DevEco Code,
 // OpenClaw, Hermes, Pi, Oh-My-Pi, Cursor, Kimi, Reasonix, Kiro, Antigravity, Qoder,
@@ -24,6 +26,9 @@ type Backend interface {
 
 // ExecOptions configures a single execution.
 type ExecOptions struct {
+	// Fork (B): select one whole Claude text/action block for a no-tools chat.
+	NoToolsChat bool
+
 	// EnableTaskSupplement installs provider hooks only for runs whose daemon/server
 	// capability handshake enabled additional messages.
 	EnableTaskSupplement bool

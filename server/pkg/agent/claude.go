@@ -1,3 +1,5 @@
+// Modified in zzzpyyy/multica (fork of multica-ai/multica v0.8.1). See MODIFICATIONS.md.
+
 package agent
 
 import (
@@ -211,6 +213,10 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 		}
 
 		startTime := time.Now()
+		var chatReply *claudeChatReply
+		if opts.NoToolsChat {
+			chatReply = &claudeChatReply{}
+		}
 		var lastAssistantText string
 		var finalResultText string
 		sawResult := false
@@ -309,7 +315,7 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 			switch msg.Type {
 			case "assistant":
 				assistantEventCount++
-				turn := b.handleAssistant(msg, msgCh, usage, seenUsage)
+				turn := b.handleAssistant(msg, msgCh, usage, seenUsage, chatReply)
 				toolUseCount += turn.toolUses
 				if !turn.understood {
 					unreadableAssistantCount++
@@ -470,6 +476,18 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 			completionGuardError,
 		)
 
+		// Fork (B): select before publishing any text. The stored reply and action
+		// are derived from this same output, not Claude Code's last-block result.
+		if chatReply != nil && finalStatus == "completed" {
+			var err error
+			finalOutput, err = chatReply.selectText(finalOutput, opts.ResumeSessionID, usageSnapshot)
+			if err != nil {
+				finalStatus, finalError = "failed", err.Error()
+			} else if finalOutput != "" {
+				trySend(msgCh, Message{Type: MessageText, Content: finalOutput})
+			}
+		}
+
 		// cmd.Wait() has returned — os/exec's stderr copy goroutine has
 		// observed every byte claude wrote to stderr before exiting, so
 		// stderrBuf.Tail() is safe to sample now. Attach the tail to any
@@ -536,7 +554,7 @@ func (b *claudeBackend) Execute(ctx context.Context, prompt string, opts ExecOpt
 	return session, nil
 }
 
-func (b *claudeBackend) handleAssistant(msg claudeSDKMessage, ch chan<- Message, usage map[string]TokenUsage, seenUsage map[string]struct{}) assistantTurn {
+func (b *claudeBackend) handleAssistant(msg claudeSDKMessage, ch chan<- Message, usage map[string]TokenUsage, seenUsage map[string]struct{}, chatReply *claudeChatReply) assistantTurn {
 	var content claudeMessageContent
 	if err := json.Unmarshal(msg.Message, &content); err != nil {
 		// Unreadable body: understood stays false so the caller drops any
@@ -573,7 +591,11 @@ func (b *claudeBackend) handleAssistant(msg claudeSDKMessage, ch chan<- Message,
 		case "text":
 			if block.Text != "" {
 				assistantText.WriteString(block.Text)
-				trySend(ch, Message{Type: MessageText, Content: block.Text})
+				if chatReply == nil {
+					trySend(ch, Message{Type: MessageText, Content: block.Text})
+				} else if msg.ParentToolUseID == "" && content.Model != "<synthetic>" {
+					chatReply.texts = append(chatReply.texts, block.Text)
+				}
 			}
 		case "thinking":
 			if block.Text != "" {
